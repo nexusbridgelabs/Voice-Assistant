@@ -1,0 +1,9 @@
+- Fixed Deepgram 1011 Error (ConnectionClosed) by implementing lazy connection.
+  - Deepgram now only connects when the first audio byte is received from the client.
+  - Automatically reconnects if Deepgram closes the connection due to silence/timeout.
+  - Wrapped Gemini initialization in try/catch to prevent startup crashes.
+- Implemented Deepgram KeepAlive mechanism (sends {"type": "KeepAlive"} every 3s) to prevent timeouts during silence.
+- Added explicit logging of audio chunk transmission in Frontend and Backend.
+- Switched LLM Provider to OpenAI-Compatible Client (AsyncOpenAI).
+  - Uses LLM_API_KEY and LLM_BASE_URL from .env.
+- Added robust WebSocket error handling and logging in backend/main.py to diagnose connection drops.

@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-dotenv
+websockets
+google-generativeai
+deepgram-sdk==3.11.0
+numpy
+openai
+httpx
