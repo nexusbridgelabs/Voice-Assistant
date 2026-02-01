@@ -64,7 +64,7 @@ class JarvisSession:
     async def send_setup(self):
         setup_msg = {
             "setup": {
-                "model": "models/gemini-2.0-flash-exp",
+                "model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
                 "generation_config": {
                     "response_modalities": ["AUDIO"]
                 },
