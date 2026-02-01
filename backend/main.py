@@ -3,6 +3,10 @@ import json
 import asyncio
 import base64
 import websockets
+import traceback
+import websockets.exceptions
+import struct
+import math
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -46,11 +50,6 @@ class JarvisSession:
         self.google_ws = None
         self.running = False
 
-import traceback
-import websockets.exceptions
-
-# ... imports ...
-
     async def connect(self):
         await self.client_ws.accept()
         print("Client Connected.")
@@ -75,10 +74,20 @@ import websockets.exceptions
         setup_msg = {
             "setup": {
                 "model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
-                "generation_config": {
-                    "response_modalities": ["AUDIO"]
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {
+                        "voiceConfig": {
+                            "prebuiltVoiceConfig": {
+                                "voiceName": "Puck"
+                            }
+                        }
+                    }
                 },
-                "system_instruction": {
+                "realtimeInputConfig": {
+                    "automaticActivityDetection": {}
+                },
+                "systemInstruction": {
                     "parts": [{"text": SYSTEM_PROMPT}]
                 }
             }
@@ -93,17 +102,30 @@ import websockets.exceptions
                 if "bytes" in message:
                     # Audio chunk from client (PCM 16kHz expected)
                     audio_data = message["bytes"]
+                    # print(f"DEBUG: Received audio chunk {len(audio_data)} bytes") 
+                    
+                    # Calculate RMS
+                    try:
+                        count = len(audio_data) // 2
+                        shorts = struct.unpack(f'<{count}h', audio_data)
+                        sum_squares = sum(s**2 for s in shorts)
+                        rms = math.sqrt(sum_squares / count)
+                        print(f"DEBUG: Audio Chunk RMS: {rms:.2f}")
+                    except Exception as e:
+                         print(f"RMS Calc Error: {e}")
+
                     b64_audio = base64.b64encode(audio_data).decode("utf-8")
                     
                     realtime_input = {
-                        "realtime_input": {
-                            "media_chunks": [{
-                                "mime_type": "audio/pcm",
+                        "realtimeInput": {
+                            "mediaChunks": [{
+                                "mimeType": "audio/pcm;rate=16000",
                                 "data": b64_audio
                             }]
                         }
                     }
                     await self.google_ws.send(json.dumps(realtime_input))
+                    # print("DEBUG: Sent chunk to Google")
                     
                 elif "text" in message:
                     # Handle text messages if needed (e.g. config updates)
@@ -124,7 +146,12 @@ import websockets.exceptions
                 if not self.running:
                     break
                 
+                print(f"DEBUG: Received from Google: {len(raw_msg)} bytes")
                 response = json.loads(raw_msg)
+                print(f"DEBUG: Google Message Keys: {response.keys()}")
+                
+                if response.get("setupComplete"):
+                    print(f"DEBUG: Setup Complete: {response}")
                 
                 # Extract Audio
                 server_content = response.get("serverContent")
