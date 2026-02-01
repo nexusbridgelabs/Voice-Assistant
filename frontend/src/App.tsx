@@ -39,8 +39,11 @@ function App() {
     // But let's keep it simple for now or relax it.
     // if (appStateRef.current === 'processing') return; 
 
-    // Noise Gate: Filter out fan noise/silence (Threshold: 1%)
-    if (audioLevelRef.current < 0.01) return;
+    // Noise Gate / Echo Rejection
+    // When agent is speaking, we raise the threshold to filter out echo.
+    // User can still "barge in" by speaking louder than the echo.
+    const threshold = appStateRef.current === 'speaking' ? 0.1 : 0.01;
+    if (audioLevelRef.current < threshold) return;
 
     if (isConnected) {
         sendMessage(data);

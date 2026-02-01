@@ -8,6 +8,8 @@ export const useAudio = () => {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nextStartTimeRef = useRef<number>(0);
+  const outputDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const audioOutputRef = useRef<HTMLAudioElement | null>(null);
 
   const startListening = useCallback(async (onAudioData: (data: ArrayBuffer) => void, deviceId?: string) => {
     try {
@@ -28,11 +30,6 @@ export const useAudio = () => {
           sampleRate: 16000,
       });
       audioContextRef.current = audioContext;
-      
-      console.log(`AudioContext Sample Rate: ${audioContext.sampleRate}`);
-      if (audioContext.sampleRate !== 16000) {
-          console.warn("AudioContext is NOT running at 16kHz! Audio will be pitch-shifted.");
-      }
 
       const source = audioContext.createMediaStreamSource(stream);
       sourceRef.current = source;
@@ -100,6 +97,15 @@ export const useAudio = () => {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
+    if (audioOutputRef.current) {
+        audioOutputRef.current.pause();
+        audioOutputRef.current.srcObject = null;
+        audioOutputRef.current = null;
+    }
+    if (outputDestRef.current) {
+        outputDestRef.current.disconnect();
+        outputDestRef.current = null;
+    }
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
@@ -116,6 +122,14 @@ export const useAudio = () => {
       }
       
       const ctx = audioContextRef.current;
+
+      // Initialize HTMLAudioElement output for AEC support
+      if (!outputDestRef.current) {
+          outputDestRef.current = ctx.createMediaStreamDestination();
+          audioOutputRef.current = new Audio();
+          audioOutputRef.current.srcObject = outputDestRef.current.stream;
+          audioOutputRef.current.play().catch(e => console.error("Audio playback error:", e));
+      }
 
       try {
         const binaryString = window.atob(base64Data);
@@ -136,7 +150,7 @@ export const useAudio = () => {
 
         const source = ctx.createBufferSource();
         source.buffer = buffer;
-        source.connect(ctx.destination);
+        source.connect(outputDestRef.current);
         
         const currentTime = ctx.currentTime;
         // Basic scheduling to prevent gaps
