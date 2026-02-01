@@ -46,20 +46,30 @@ class JarvisSession:
         self.google_ws = None
         self.running = False
 
+import traceback
+import websockets.exceptions
+
+# ... imports ...
+
     async def connect(self):
         await self.client_ws.accept()
         print("Client Connected.")
         
         # Connect to Google Live API
-        url = f"wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key={GOOGLE_API_KEY}"
+        url = f"wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={GOOGLE_API_KEY}"
         try:
             self.google_ws = await websockets.connect(url)
             print("Connected to Google Live API")
             await self.send_setup()
             self.running = True
+        except websockets.exceptions.InvalidStatusCode as e:
+            print(f"Google Connection Failed: Status {e.status_code}")
+            print(f"Headers: {e.headers}")
+            await self.client_ws.close(code=1011, reason=f"Google API Error: {e.status_code}")
         except Exception as e:
             print(f"Google Connection Error: {e}")
-            await self.client_ws.close()
+            traceback.print_exc()
+            await self.client_ws.close(code=1011, reason=str(e))
 
     async def send_setup(self):
         setup_msg = {

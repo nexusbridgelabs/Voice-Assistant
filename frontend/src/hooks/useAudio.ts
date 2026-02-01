@@ -28,6 +28,11 @@ export const useAudio = () => {
           sampleRate: 16000,
       });
       audioContextRef.current = audioContext;
+      
+      console.log(`AudioContext Sample Rate: ${audioContext.sampleRate}`);
+      if (audioContext.sampleRate !== 16000) {
+          console.warn("AudioContext is NOT running at 16kHz! Audio will be pitch-shifted.");
+      }
 
       const source = audioContext.createMediaStreamSource(stream);
       sourceRef.current = source;
@@ -38,19 +43,33 @@ export const useAudio = () => {
 
       processor.onaudioprocess = (e) => {
         const inputData = e.inputBuffer.getChannelData(0);
+        const inputSampleRate = audioContext.sampleRate;
+        const targetSampleRate = 16000;
         
-        // Calculate volume for visualization
-        let sum = 0;
-        for (let i = 0; i < inputData.length; i++) {
-             sum += inputData[i] * inputData[i];
+        let finalData = inputData;
+
+        // Downsample if needed
+        if (inputSampleRate > targetSampleRate) {
+            const ratio = inputSampleRate / targetSampleRate;
+            const newLength = Math.floor(inputData.length / ratio);
+            finalData = new Float32Array(newLength);
+            for (let i = 0; i < newLength; i++) {
+                finalData[i] = inputData[Math.floor(i * ratio)];
+            }
         }
-        const rms = Math.sqrt(sum / inputData.length);
+        
+        // Calculate volume for visualization (using downsampled data is fine)
+        let sum = 0;
+        for (let i = 0; i < finalData.length; i++) {
+             sum += finalData[i] * finalData[i];
+        }
+        const rms = Math.sqrt(sum / finalData.length);
         setAudioLevel(Math.min(rms * 5, 1)); 
 
         // Convert Float32 to Int16 PCM
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-             let s = Math.max(-1, Math.min(1, inputData[i]));
+        const pcmData = new Int16Array(finalData.length);
+        for (let i = 0; i < finalData.length; i++) {
+             let s = Math.max(-1, Math.min(1, finalData[i]));
              pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
         
