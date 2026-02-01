@@ -4,20 +4,18 @@ export const useAudio = () => {
   const [isListening, setIsListening] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const analyzerRef = useRef<AnalyserNode | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const nextStartTimeRef = useRef<number>(0);
 
-  const startListening = useCallback(async (onAudioData?: (data: Blob) => void, deviceId?: string) => {
+  const startListening = useCallback(async (onAudioData: (data: ArrayBuffer) => void, deviceId?: string) => {
     try {
       const constraints = { 
         audio: { 
             deviceId: deviceId ? { exact: deviceId } : undefined,
             channelCount: 1,
-            sampleRate: 16000, // Deepgram prefers 16k
+            sampleRate: 16000,
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true
@@ -26,34 +24,44 @@ export const useAudio = () => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: 16000,
+      });
       audioContextRef.current = audioContext;
-
-      const analyzer = audioContext.createAnalyser();
-      analyzer.fftSize = 256;
-      analyzerRef.current = analyzer;
 
       const source = audioContext.createMediaStreamSource(stream);
       sourceRef.current = source;
-      source.connect(analyzer);
+      
+      // Buffer size 4096 gives ~256ms latency at 16k
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
 
-      const dataArray = new Uint8Array(analyzer.frequencyBinCount);
-      dataArrayRef.current = dataArray;
-
-      // MediaRecorder for streaming audio data
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && onAudioData) {
-            onAudioData(event.data);
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Calculate volume for visualization
+        let sum = 0;
+        for (let i = 0; i < inputData.length; i++) {
+             sum += inputData[i] * inputData[i];
         }
+        const rms = Math.sqrt(sum / inputData.length);
+        setAudioLevel(Math.min(rms * 5, 1)); 
+
+        // Convert Float32 to Int16 PCM
+        const pcmData = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+             let s = Math.max(-1, Math.min(1, inputData[i]));
+             pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        
+        onAudioData(pcmData.buffer);
       };
 
-      mediaRecorder.start(100); // Chunk every 100ms
+      source.connect(processor);
+      processor.connect(audioContext.destination);
 
       setIsListening(true);
-      analyzeAudio();
+      nextStartTimeRef.current = audioContext.currentTime;
 
     } catch (err) {
       console.error("Error accessing microphone:", err);
@@ -61,40 +69,65 @@ export const useAudio = () => {
   }, []);
 
   const stopListening = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
+    if (processorRef.current) {
+        processorRef.current.disconnect();
+        processorRef.current = null;
+    }
+    if (sourceRef.current) {
+        sourceRef.current.disconnect();
+        sourceRef.current = null;
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
     if (audioContextRef.current) {
       audioContextRef.current.close();
-    }
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
+      audioContextRef.current = null;
     }
     setIsListening(false);
     setAudioLevel(0);
   }, []);
 
-  const analyzeAudio = () => {
-    if (!analyzerRef.current || !dataArrayRef.current) return;
+  const playAudioChunk = useCallback((base64Data: string) => {
+      // Ensure we have an audio context for playback even if not listening
+      if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+          nextStartTimeRef.current = audioContextRef.current.currentTime;
+      }
+      
+      const ctx = audioContextRef.current;
 
-    analyzerRef.current.getByteFrequencyData(dataArrayRef.current);
-    
-    // Calculate average volume
-    let sum = 0;
-    for (let i = 0; i < dataArrayRef.current.length; i++) {
-      sum += dataArrayRef.current[i];
-    }
-    const average = sum / dataArrayRef.current.length;
-    
-    // Normalize to 0-1 range
-    const normalizedLevel = Math.min(average / 128, 1);
-    setAudioLevel(normalizedLevel);
+      try {
+        const binaryString = window.atob(base64Data);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        const int16Data = new Int16Array(bytes.buffer);
+        const float32Data = new Float32Array(int16Data.length);
+        for (let i = 0; i < int16Data.length; i++) {
+            float32Data[i] = int16Data[i] / 32768.0;
+        }
 
-    animationFrameRef.current = requestAnimationFrame(analyzeAudio);
-  };
+        // Gemini Live Audio is typically 24kHz
+        const buffer = ctx.createBuffer(1, float32Data.length, 24000); 
+        buffer.copyToChannel(float32Data, 0);
+
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        
+        const currentTime = ctx.currentTime;
+        // Basic scheduling to prevent gaps
+        const startTime = Math.max(currentTime, nextStartTimeRef.current);
+        source.start(startTime);
+        nextStartTimeRef.current = startTime + buffer.duration;
+      } catch (e) {
+          console.error("Error playing audio chunk", e);
+      }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -102,5 +135,5 @@ export const useAudio = () => {
     };
   }, [stopListening]);
 
-  return { isListening, audioLevel, startListening, stopListening, stream: streamRef.current };
+  return { isListening, audioLevel, startListening, stopListening, playAudioChunk };
 };

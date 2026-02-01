@@ -14,7 +14,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>();
   
-  const { isListening, audioLevel, startListening, stopListening } = useAudio();
+  const { isListening, audioLevel, startListening, stopListening, playAudioChunk } = useAudio();
   const { isConnected, sendMessage, lastMessage } = useWebSocket('ws://localhost:8000/ws');
   
   // Ref to access current state/level in callbacks without dependency issues (Stale Closure Fix)
@@ -29,26 +29,21 @@ function App() {
     appStateRef.current = appState;
   }, [appState]);
 
-  const handleAudioData = (data: Blob) => {
+  const handleAudioData = (data: ArrayBuffer) => {
     // Debugging Audio Flow
     // console.log(`Audio Check - State: ${appStateRef.current}, Level: ${audioLevelRef.current.toFixed(4)}`);
 
     // Software Audio Gate
     // 1. Block while THINKING (Processing) to prevent queuing.
-    if (appStateRef.current === 'processing') return;
+    // With Live API, we want to allow barge-in, so we might NOT want to block.
+    // But let's keep it simple for now or relax it.
+    // if (appStateRef.current === 'processing') return; 
 
     // Noise Gate: Filter out fan noise/silence (Threshold: 1%)
     if (audioLevelRef.current < 0.01) return;
 
     if (isConnected) {
-        // Convert Blob to ArrayBuffer
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (reader.result instanceof ArrayBuffer) {
-                sendMessage(reader.result);
-            }
-        };
-        reader.readAsArrayBuffer(data);
+        sendMessage(data);
     }
   };
 
@@ -84,65 +79,25 @@ function App() {
             const data = JSON.parse(lastMessage);
             
             if (data.type === 'state') {
-                // Backend explicitly telling us the state (e.g. "processing", "speaking", "idle")
-                // We prefer our local logic for 'speaking' (TTS) but 'processing' is useful.
                 if (data.state === 'processing') setAppState('processing');
-                // if (data.state === 'idle') setAppState('listening'); // Handled by TTS end
             } 
+            else if (data.type === 'audio') {
+                playAudioChunk(data.data);
+                setAppState('speaking');
+            }
+            else if (data.type === 'turn_complete') {
+                setAppState('listening');
+            }
             else if (data.type === 'transcript') {
-                // Barge-in Logic
-                // Only interrupt if the user is actually speaking loud enough (Threshold: 20%)
-                // This prevents Echo (which is usually quieter) from triggering self-interruption.
-                if (window.speechSynthesis.speaking && audioLevelRef.current > 0.2) {
-                    console.log("Barge-in triggered!");
-                    window.speechSynthesis.cancel();
-                    setAppState('listening');
-                }
-
+                // User transcript from backend (if available) or intermediate
                 setMessages(prev => {
-                    const lastMsg = prev[prev.length - 1];
-                    const isLastPartial = lastMsg?.role === 'user' && lastMsg?.isPartial;
-
-                    if (data.isFinal) {
-                        setAppState('processing'); // Switch to Thinking visual
-                        
-                        if (isLastPartial) {
-                            // Finalize the partial message
-                            return [...prev.slice(0, -1), { 
-                                ...lastMsg, 
-                                text: data.content, 
-                                isPartial: false 
-                            }];
-                        } else {
-                            // New final message
-                            return [...prev, {
-                                id: Date.now().toString(),
-                                role: 'user',
-                                text: data.content,
-                                timestamp: Date.now()
-                            }];
-                        }
-                    } else {
-                        // Incoming Partial
-                        if (isLastPartial) {
-                            // Update existing partial
-                            return [...prev.slice(0, -1), { 
-                                ...lastMsg, 
-                                text: data.content 
-                            }];
-                        } else {
-                            // Create new partial
-                            return [...prev, {
-                                id: Date.now().toString(),
-                                role: 'user',
-                                text: data.content,
-                                timestamp: Date.now(),
-                                isPartial: true
-                            }];
-                        }
-                    }
+                    // Logic to update user message ...
+                    // For now, assuming Google doesn't send user transcript often, 
+                    // this might be rare.
+                    return prev;
                 });
             } else if (data.type === 'response_chunk') {
+                 // Text response from Assistant
                  setMessages(prev => {
                     const lastMsg = prev[prev.length - 1];
                     const isLastPartial = lastMsg?.role === 'assistant' && lastMsg?.isPartial;
@@ -162,44 +117,8 @@ function App() {
                         }];
                     }
                  });
-            } else if (data.type === 'response_complete') {
-                 console.log("Response Complete received");
-                 setMessages(prev => {
-                    // Find the last partial assistant message
-                    let index = prev.findLastIndex(m => m.role === 'assistant' && m.isPartial);
-                    
-                    // Fallback: If no partial found, find last assistant message period
-                    if (index === -1) {
-                        index = prev.findLastIndex(m => m.role === 'assistant');
-                    }
-
-                    if (index !== -1) {
-                        const newMessages = [...prev];
-                        newMessages[index] = {
-                            ...newMessages[index],
-                            text: data.content,
-                            isPartial: false
-                        };
-                        return newMessages;
-                    }
-                    return prev;
-                 });
-
-                 // Speak (Browser Native TTS)
-                 window.speechSynthesis.cancel();
-                 const utterance = new SpeechSynthesisUtterance(data.content);
-                 const voices = window.speechSynthesis.getVoices();
-                 utterance.voice = voices.find(v => v.name.includes('Google US English')) || voices[0];
-                 utterance.rate = 1.0;
-                 utterance.pitch = 1.0;
-                 
-                 utterance.onstart = () => setAppState('speaking');
-                 utterance.onend = () => setAppState('listening'); // Return to listening after speech
-                 
-                 window.speechSynthesis.speak(utterance);
             } else if (data.type === 'reset_audio') {
                 console.log("Resetting audio stream...");
-                // Restart microphone to send new header
                 stopListening();
                 setTimeout(() => {
                     startListening(handleAudioData, selectedDeviceId);
@@ -212,10 +131,9 @@ function App() {
                     text: `Error: ${data.content}`,
                     timestamp: Date.now()
                 }]);
-                setAppState('listening'); // Recover state on error
+                setAppState('listening');
             }
         } catch (e) {
-             // Fallback
              console.log("Non-JSON message:", lastMessage);
         }
     }
