@@ -15,7 +15,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>();
   
-  const { isListening, audioLevel, pcmRms, startListening, stopListening, playAudioChunk } = useAudio();
+  const { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk } = useAudio();
   const { isConnected, sendMessage, lastMessage } = useWebSocket('ws://localhost:8000/ws');
   
   // Ref to access current state/level in callbacks without dependency issues (Stale Closure Fix)
@@ -185,7 +185,7 @@ function App() {
       <ChatPanel messages={messages} onSendMessage={handleSendMessage} />
       
       {/* Audio Debug Panel (Floating) */}
-      <AudioDebugPanel pcmRms={pcmRms} />
+      <AudioDebugPanel pcmRms={pcmRms} analyser={analyser} />
 
       {/* 3D Visualizer Canvas */}
       <div className="w-full h-full absolute inset-0 z-0">

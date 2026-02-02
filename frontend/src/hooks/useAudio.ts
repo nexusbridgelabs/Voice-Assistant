@@ -4,8 +4,10 @@ export const useAudio = () => {
   const [isListening, setIsListening] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [pcmRms, setPcmRms] = useState(0);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const processorRef = useRef<AudioNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nextStartTimeRef = useRef<number>(0);
@@ -35,6 +37,11 @@ export const useAudio = () => {
       const source = audioContext.createMediaStreamSource(stream);
       sourceRef.current = source;
       
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyserRef.current = analyser;
+      setAnalyser(analyser);
+
       const processor = audioContext.createScriptProcessor(2048, 1, 1);
       processorRef.current = processor;
 
@@ -89,6 +96,7 @@ export const useAudio = () => {
         onAudioData(pcmData.buffer);
       };
 
+      source.connect(analyser);
       source.connect(processor);
       processor.connect(audioContext.destination);
 
@@ -109,6 +117,11 @@ export const useAudio = () => {
         sourceRef.current.disconnect();
         sourceRef.current = null;
     }
+    if (analyserRef.current) {
+        analyserRef.current.disconnect();
+        analyserRef.current = null;
+    }
+    setAnalyser(null);
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -192,5 +205,5 @@ export const useAudio = () => {
     };
   }, [stopListening]);
 
-  return { isListening, audioLevel, pcmRms, startListening, stopListening, playAudioChunk };
+  return { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk };
 };
