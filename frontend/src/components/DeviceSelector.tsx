@@ -11,25 +11,14 @@ export const DeviceSelector = ({ onDeviceSelect, currentDeviceId }: DeviceSelect
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    const getDevices = async () => {
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true }); // Request permission first
-        const dev = await navigator.mediaDevices.enumerateDevices();
-        const audioInputs = dev.filter(d => d.kind === 'audioinput');
-        setDevices(audioInputs);
-        if (audioInputs.length > 0 && !currentDeviceId) {
-           // Auto-select first one if none selected
-           onDeviceSelect(audioInputs[0].deviceId);
-        }
-      } catch (e) {
-        console.error("Error getting devices", e);
-      }
+    const updateDevices = async () => {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setDevices(devices.filter(d => d.kind === 'audioinput'));
     };
-    getDevices();
-    
-    navigator.mediaDevices.addEventListener('devicechange', getDevices);
-    return () => navigator.mediaDevices.removeEventListener('devicechange', getDevices);
-  }, []);
+    updateDevices();
+    navigator.mediaDevices.addEventListener('devicechange', updateDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', updateDevices);
+  }, [currentDeviceId, onDeviceSelect]);
 
   if (devices.length === 0) return null;
 

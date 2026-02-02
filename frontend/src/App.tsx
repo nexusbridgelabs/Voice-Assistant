@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Mic, Power } from 'lucide-react';
@@ -30,23 +30,14 @@ function App() {
     appStateRef.current = appState;
   }, [appState]);
 
-  const handleAudioData = (data: ArrayBuffer) => {
-    // Debugging Audio Flow
-    // console.log(`Audio Check - State: ${appStateRef.current}, Level: ${audioLevelRef.current.toFixed(4)}`);
-
-    // Software Audio Gate
-    // 1. Block while THINKING (Processing) to prevent queuing.
-    // With Live API, we want to allow barge-in, so we might NOT want to block.
-    // But let's keep it simple for now or relax it.
-    // if (appStateRef.current === 'processing') return; 
-
+  const handleAudioData = useCallback((data: ArrayBuffer) => {
     // Noise Gate: Filter out fan noise/silence (Threshold: 1%)
     if (audioLevelRef.current < 0.01) return;
 
     if (isConnected) {
         sendMessage(data);
     }
-  };
+  }, [isConnected, sendMessage]);
 
   const togglePower = () => {
     if (isListening) {
@@ -80,50 +71,58 @@ function App() {
             const data = JSON.parse(lastMessage);
             
             if (data.type === 'state') {
-                if (data.state === 'processing') setAppState('processing');
+                if (data.state === 'processing') {
+                    Promise.resolve().then(() => setAppState('processing'));
+                }
             } 
             else if (data.type === 'audio') {
                 playAudioChunk(data.data);
-                setAppState('speaking');
+                Promise.resolve().then(() => setAppState('speaking'));
             }
             else if (data.type === 'turn_complete') {
-                setAppState('listening');
-                setMessages(prev => {
-                    const last = prev[prev.length - 1];
-                    if (last && last.role === 'assistant') {
-                        return [...prev.slice(0, -1), { ...last, isPartial: false }];
-                    }
-                    return prev;
+                Promise.resolve().then(() => {
+                    setAppState('listening');
+                    setMessages(prev => {
+                        const last = prev[prev.length - 1];
+                        if (last && last.role === 'assistant') {
+                            return [...prev.slice(0, -1), { ...last, isPartial: false }];
+                        }
+                        return prev;
+                    });
                 });
             }
             else if (data.type === 'transcript') {
                 // User transcript from backend (if available) or intermediate
-                setMessages(prev => {
-                    // Logic to update user message ...
-                    // For now, assuming Google doesn't send user transcript often, 
-                    // this might be rare.
-                    return prev;
+                Promise.resolve().then(() => {
+                    setMessages(prev => {
+                        // Logic to update user message ...
+                        // For now, assuming Google doesn't send user transcript often, 
+                        // this might be rare.
+                        return prev;
+                    });
                 });
             } else if (data.type === 'response_chunk') {
                  // Text response from Assistant
-                 setMessages(prev => {
-                    const lastMsg = prev[prev.length - 1];
-                    const isLastPartial = lastMsg?.role === 'assistant' && lastMsg?.isPartial;
+                 Promise.resolve().then(() => {
+                    setMessages(prev => {
+                        const lastMsg = prev[prev.length - 1];
+                        const isLastPartial = lastMsg?.role === 'assistant' && lastMsg?.isPartial;
 
-                    if (isLastPartial) {
-                        return [...prev.slice(0, -1), { 
-                            ...lastMsg, 
-                            text: lastMsg.text + data.content 
-                        }];
-                    } else {
-                        return [...prev, {
-                            id: Date.now().toString(),
-                            role: 'assistant',
-                            text: data.content,
-                            timestamp: Date.now(),
-                            isPartial: true
-                        }];
-                    }
+                        if (isLastPartial) {
+                            return [...prev.slice(0, -1), { 
+                                ...lastMsg, 
+                                text: lastMsg.text + data.content 
+                            }];
+                        } else {
+                            return [...prev, {
+                                id: Date.now().toString(),
+                                role: 'assistant',
+                                text: data.content,
+                                timestamp: Date.now(),
+                                isPartial: true
+                            }];
+                        }
+                    });
                  });
             } else if (data.type === 'reset_audio') {
                 console.log("Resetting audio stream...");
@@ -133,19 +132,21 @@ function App() {
                     sendMessage(JSON.stringify({ type: "audio_reset_complete" }));
                 }, 100);
             } else if (data.type === 'error') {
-                setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    text: `Error: ${data.content}`,
-                    timestamp: Date.now()
-                }]);
-                setAppState('listening');
+                Promise.resolve().then(() => {
+                    setMessages(prev => [...prev, {
+                        id: Date.now().toString(),
+                        role: 'assistant',
+                        text: `Error: ${data.content}`,
+                        timestamp: Date.now()
+                    }]);
+                    setAppState('listening');
+                });
             }
-        } catch (e) {
+        } catch {
              console.log("Non-JSON message:", lastMessage);
         }
     }
-  }, [lastMessage]);
+  }, [lastMessage, handleAudioData, playAudioChunk, selectedDeviceId, sendMessage, startListening, stopListening]);
 
 
   return (
@@ -184,7 +185,7 @@ function App() {
       <ChatPanel messages={messages} onSendMessage={handleSendMessage} />
       
       {/* Audio Debug Panel (Floating) */}
-      <AudioDebugPanel pcmRms={pcmRms} audioLevel={audioLevel} />
+      <AudioDebugPanel pcmRms={pcmRms} />
 
       {/* 3D Visualizer Canvas */}
       <div className="w-full h-full absolute inset-0 z-0">

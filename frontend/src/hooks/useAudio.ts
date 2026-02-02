@@ -27,7 +27,7 @@ export const useAudio = () => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)({
           sampleRate: 16000,
       });
       audioContextRef.current = audioContext;
@@ -36,7 +36,7 @@ export const useAudio = () => {
       sourceRef.current = source;
       
       const processor = audioContext.createScriptProcessor(2048, 1, 1);
-      (processorRef as any).current = processor;
+      processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
         const inputData = e.inputBuffer.getChannelData(0);
@@ -134,7 +134,7 @@ export const useAudio = () => {
   const playAudioChunk = useCallback((base64Data: string) => {
       // Ensure we have an audio context for playback even if not listening
       if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+          audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
           nextStartTimeRef.current = audioContextRef.current.currentTime;
       }
       

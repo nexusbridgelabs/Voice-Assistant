@@ -3,10 +3,9 @@ import { Activity, GripHorizontal, X } from 'lucide-react';
 
 interface AudioDebugPanelProps {
   pcmRms: number;
-  audioLevel: number;
 }
 
-export const AudioDebugPanel = ({ pcmRms, audioLevel }: AudioDebugPanelProps) => {
+export const AudioDebugPanel = ({ pcmRms }: AudioDebugPanelProps) => {
   const [position, setPosition] = useState({ x: 20, y: 100 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -18,19 +17,6 @@ export const AudioDebugPanel = ({ pcmRms, audioLevel }: AudioDebugPanelProps) =>
       x: e.clientX - position.x,
       y: e.clientY - position.y
     });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      setPosition({
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y
-      });
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
   };
 
   // Global mouse up to catch drags that go outside the element
