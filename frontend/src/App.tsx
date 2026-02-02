@@ -4,6 +4,7 @@ import { OrbitControls } from '@react-three/drei';
 import { Mic, Power } from 'lucide-react';
 import { JarvisSphere } from './components/JarvisSphere';
 import { ChatPanel } from './components/ChatPanel';
+import { AudioDebugPanel } from './components/AudioDebugPanel';
 import { DeviceSelector } from './components/DeviceSelector';
 import type { Message } from './types';
 import { useAudio } from './hooks/useAudio';
@@ -14,7 +15,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>();
   
-  const { isListening, audioLevel, startListening, stopListening, playAudioChunk } = useAudio();
+  const { isListening, audioLevel, pcmRms, startListening, stopListening, playAudioChunk } = useAudio();
   const { isConnected, sendMessage, lastMessage } = useWebSocket('ws://localhost:8000/ws');
   
   // Ref to access current state/level in callbacks without dependency issues (Stale Closure Fix)
@@ -39,11 +40,8 @@ function App() {
     // But let's keep it simple for now or relax it.
     // if (appStateRef.current === 'processing') return; 
 
-    // Noise Gate / Echo Rejection
-    // When agent is speaking, we raise the threshold to filter out echo.
-    // User can still "barge in" by speaking louder than the echo.
-    const threshold = appStateRef.current === 'speaking' ? 0.1 : 0.01;
-    if (audioLevelRef.current < threshold) return;
+    // Noise Gate: Filter out fan noise/silence (Threshold: 1%)
+    if (audioLevelRef.current < 0.01) return;
 
     if (isConnected) {
         sendMessage(data);
@@ -90,6 +88,13 @@ function App() {
             }
             else if (data.type === 'turn_complete') {
                 setAppState('listening');
+                setMessages(prev => {
+                    const last = prev[prev.length - 1];
+                    if (last && last.role === 'assistant') {
+                        return [...prev.slice(0, -1), { ...last, isPartial: false }];
+                    }
+                    return prev;
+                });
             }
             else if (data.type === 'transcript') {
                 // User transcript from backend (if available) or intermediate
@@ -177,9 +182,13 @@ function App() {
 
       {/* Chat Panel (Floating) */}
       <ChatPanel messages={messages} onSendMessage={handleSendMessage} />
+      
+      {/* Audio Debug Panel (Floating) */}
+      <AudioDebugPanel pcmRms={pcmRms} audioLevel={audioLevel} />
 
       {/* 3D Visualizer Canvas */}
       <div className="w-full h-full absolute inset-0 z-0">
+
         <Canvas camera={{ position: [0, 0, 4] }}>
           <ambientLight intensity={0.2} />
           <pointLight position={[10, 10, 10]} intensity={1.5} color="#00f0ff" />

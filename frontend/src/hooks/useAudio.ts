@@ -3,9 +3,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 export const useAudio = () => {
   const [isListening, setIsListening] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [pcmRms, setPcmRms] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const processorRef = useRef<AudioNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const outputDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
@@ -30,13 +31,12 @@ export const useAudio = () => {
           sampleRate: 16000,
       });
       audioContextRef.current = audioContext;
-
+      
       const source = audioContext.createMediaStreamSource(stream);
       sourceRef.current = source;
       
-      // Buffer size 4096 gives ~256ms latency at 16k
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
+      const processor = audioContext.createScriptProcessor(2048, 1, 1);
+      (processorRef as any).current = processor;
 
       processor.onaudioprocess = (e) => {
         const inputData = e.inputBuffer.getChannelData(0);
@@ -45,17 +45,25 @@ export const useAudio = () => {
         
         let finalData = inputData;
 
-        // Downsample if needed
+        // Downsample (Box Filter)
         if (inputSampleRate > targetSampleRate) {
             const ratio = inputSampleRate / targetSampleRate;
             const newLength = Math.floor(inputData.length / ratio);
             finalData = new Float32Array(newLength);
             for (let i = 0; i < newLength; i++) {
-                finalData[i] = inputData[Math.floor(i * ratio)];
+                const offset = Math.floor(i * ratio);
+                const nextOffset = Math.floor((i + 1) * ratio);
+                let sum = 0;
+                let count = 0;
+                for (let j = offset; j < nextOffset && j < inputData.length; j++) {
+                    sum += inputData[j];
+                    count++;
+                }
+                finalData[i] = count > 0 ? sum / count : 0;
             }
         }
         
-        // Calculate volume for visualization (using downsampled data is fine)
+        // Calculate volume for visualization
         let sum = 0;
         for (let i = 0; i < finalData.length; i++) {
              sum += finalData[i] * finalData[i];
@@ -63,13 +71,21 @@ export const useAudio = () => {
         const rms = Math.sqrt(sum / finalData.length);
         setAudioLevel(Math.min(rms * 5, 1)); 
 
-        // Convert Float32 to Int16 PCM
+        // Gain
+        const gain = 1.0;
         const pcmData = new Int16Array(finalData.length);
+        let pcmSumSq = 0;
         for (let i = 0; i < finalData.length; i++) {
-             let s = Math.max(-1, Math.min(1, finalData[i]));
+             let s = finalData[i] * gain;
+             s = Math.max(-1, Math.min(1, s));
              pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+             pcmSumSq += pcmData[i] * pcmData[i];
         }
         
+        // Calculate PCM RMS (Integer based, matching backend)
+        const currentPcmRms = Math.sqrt(pcmSumSq / pcmData.length);
+        setPcmRms(currentPcmRms);
+
         onAudioData(pcmData.buffer);
       };
 
@@ -112,6 +128,7 @@ export const useAudio = () => {
     }
     setIsListening(false);
     setAudioLevel(0);
+    setPcmRms(0);
   }, []);
 
   const playAudioChunk = useCallback((base64Data: string) => {
@@ -140,11 +157,13 @@ export const useAudio = () => {
         }
         const int16Data = new Int16Array(bytes.buffer);
         const float32Data = new Float32Array(int16Data.length);
+        console.log(`Received Audio Chunk: ${float32Data.length} samples. Duration at 24k: ${(float32Data.length/24000).toFixed(3)}s, at 16k: ${(float32Data.length/16000).toFixed(3)}s`);
         for (let i = 0; i < int16Data.length; i++) {
             float32Data[i] = int16Data[i] / 32768.0;
         }
 
-        // Gemini Live Audio is typically 24kHz
+        // Gemini Live Audio is typically 24kHz, but preview might be 16kHz?
+        // If it sounds high-pitched/fast, lower this. If low-pitched/slow, raise it.
         const buffer = ctx.createBuffer(1, float32Data.length, 24000); 
         buffer.copyToChannel(float32Data, 0);
 
@@ -153,10 +172,15 @@ export const useAudio = () => {
         source.connect(outputDestRef.current);
         
         const currentTime = ctx.currentTime;
-        // Basic scheduling to prevent gaps
-        const startTime = Math.max(currentTime, nextStartTimeRef.current);
+        // Jitter Buffer: If we drift behind (underrun), reset to now + safety margin
+        // Increased to 0.5s to fix "choppy" audio reports
+        if (nextStartTimeRef.current < currentTime) {
+            nextStartTimeRef.current = currentTime + 0.5; 
+        }
+        
+        const startTime = nextStartTimeRef.current;
         source.start(startTime);
-        nextStartTimeRef.current = startTime + buffer.duration;
+        nextStartTimeRef.current += buffer.duration;
       } catch (e) {
           console.error("Error playing audio chunk", e);
       }
@@ -168,5 +192,5 @@ export const useAudio = () => {
     };
   }, [stopListening]);
 
-  return { isListening, audioLevel, startListening, stopListening, playAudioChunk };
+  return { isListening, audioLevel, pcmRms, startListening, stopListening, playAudioChunk };
 };

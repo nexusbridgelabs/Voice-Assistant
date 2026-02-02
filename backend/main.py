@@ -7,6 +7,7 @@ import traceback
 import websockets.exceptions
 import struct
 import math
+import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -73,7 +74,7 @@ class JarvisSession:
     async def send_setup(self):
         setup_msg = {
             "setup": {
-                "model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
+                "model": "models/gemini-2.5-flash-native-audio-latest",
                 "generationConfig": {
                     "responseModalities": ["AUDIO"],
                     "speechConfig": {
@@ -88,11 +89,15 @@ class JarvisSession:
                     "automaticActivityDetection": {}
                 },
                 "systemInstruction": {
-                    "parts": [{"text": SYSTEM_PROMPT}]
+                    "parts": [{"text": "Please converse in English. " + SYSTEM_PROMPT}]
                 }
             }
         }
         await self.google_ws.send(json.dumps(setup_msg))
+
+    async def send_client_content(self):
+        # We can send this to signal turn end if we want, but VAD should do it.
+        pass
 
     async def handle_client_messages(self):
         try:
@@ -102,24 +107,38 @@ class JarvisSession:
                 if "bytes" in message:
                     # Audio chunk from client (PCM 16kHz expected)
                     audio_data = message["bytes"]
+                    
+                    # DEBUG: Save to file
+                    try:
+                        with open("test_write/debug_input.pcm", "ab") as f:
+                            f.write(audio_data)
+                    except Exception as e:
+                        print(f"File Write Error: {e}")
+
                     # print(f"DEBUG: Received audio chunk {len(audio_data)} bytes") 
                     
                     # Calculate RMS
+                    rms = 0
                     try:
                         count = len(audio_data) // 2
                         shorts = struct.unpack(f'<{count}h', audio_data)
                         sum_squares = sum(s**2 for s in shorts)
                         rms = math.sqrt(sum_squares / count)
-                        print(f"DEBUG: Audio Chunk RMS: {rms:.2f}")
+                        
+                        # Debug RMS every ~50 chunks
+                        if int(time.time() * 20) % 50 == 0:
+                             print(f"DEBUG: RMS: {rms:.0f}")
                     except Exception as e:
                          print(f"RMS Calc Error: {e}")
+
+                    # --- Manual VAD Logic REMOVED (Reverting to Auto VAD) ---
 
                     b64_audio = base64.b64encode(audio_data).decode("utf-8")
                     
                     realtime_input = {
                         "realtimeInput": {
                             "mediaChunks": [{
-                                "mimeType": "audio/pcm;rate=16000",
+                                "mimeType": "audio/pcm",
                                 "data": b64_audio
                             }]
                         }
@@ -163,6 +182,7 @@ class JarvisSession:
                             if "inlineData" in part:
                                 # Received Audio
                                 b64_data = part["inlineData"]["data"]
+                                # print(f"DEBUG: Received Audio Part (len={len(b64_data)})")
                                 # Send back to client as base64 or bytes?
                                 # Let's send as JSON with type "audio" for frontend to handle
                                 await self.client_ws.send_text(json.dumps({
@@ -171,6 +191,7 @@ class JarvisSession:
                                 }))
                             elif "text" in part:
                                 # Received Text
+                                print(f"DEBUG: Received Text Part: {part['text'][:100]}...")
                                 await self.client_ws.send_text(json.dumps({
                                     "type": "response_chunk",
                                     "content": part["text"]
@@ -178,11 +199,13 @@ class JarvisSession:
                 
                 # Handle Turn Complete
                 if server_content and server_content.get("turnComplete"):
+                    print("DEBUG: Google sent Turn Complete -> Forwarding to Client")
                     await self.client_ws.send_text(json.dumps({"type": "turn_complete"}))
 
         except Exception as e:
             print(f"Google Loop Error: {e}")
         finally:
+            print("DEBUG: Google Loop Exited")
             self.running = False
             try:
                 await self.client_ws.close()
