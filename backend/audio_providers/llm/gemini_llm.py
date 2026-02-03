@@ -6,7 +6,10 @@ import traceback
 from .base import LLMProvider
 
 class GeminiLLMProvider(LLMProvider):
-    def __init__(self, api_key: str, system_prompt: str, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, api_key: str, system_prompt: str, model_name: str = None):
+        if model_name is None:
+            model_name = os.getenv("TTS_ENGINE_LLM", "gemini-1.5-flash")
+            
         print(f"Initializing Gemini LLM with model: {model_name}")
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
