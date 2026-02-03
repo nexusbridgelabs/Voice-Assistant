@@ -79,7 +79,7 @@ export const useAudio = () => {
         setAudioLevel(Math.min(rms * 5, 1)); 
 
         // Gain
-        const gain = 1.0;
+        const gain = 5.0;
         const pcmData = new Int16Array(finalData.length);
         let pcmSumSq = 0;
         for (let i = 0; i < finalData.length; i++) {

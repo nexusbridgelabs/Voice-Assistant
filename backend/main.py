@@ -74,7 +74,7 @@ class JarvisSession:
     async def send_setup(self):
         setup_msg = {
             "setup": {
-                "model": "models/gemini-2.5-flash-native-audio-latest",
+                "model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
                 "generationConfig": {
                     "responseModalities": ["AUDIO"],
                     "speechConfig": {
@@ -88,6 +88,7 @@ class JarvisSession:
                 "realtimeInputConfig": {
                     "automaticActivityDetection": {}
                 },
+                "inputAudioTranscription": {}, 
                 "systemInstruction": {
                     "parts": [{"text": "Please converse in English. " + SYSTEM_PROMPT}]
                 }
@@ -138,7 +139,7 @@ class JarvisSession:
                     realtime_input = {
                         "realtimeInput": {
                             "mediaChunks": [{
-                                "mimeType": "audio/pcm",
+                                "mimeType": "audio/pcm;rate=16000",
                                 "data": b64_audio
                             }]
                         }
@@ -172,6 +173,11 @@ class JarvisSession:
                 if response.get("setupComplete"):
                     print(f"DEBUG: Setup Complete: {response}")
                 
+                # Handle Transcriptions
+                transcription = response.get("audioTranscription")
+                if transcription:
+                    print(f"USER SAID: {transcription.get('text')}")
+
                 # Extract Audio
                 server_content = response.get("serverContent")
                 if server_content:
