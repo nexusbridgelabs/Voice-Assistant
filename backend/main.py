@@ -50,6 +50,7 @@ class JarvisSession:
         self.client_ws = websocket
         self.google_ws = None
         self.running = False
+        self.is_responding = False
 
     async def connect(self):
         await self.client_ws.accept()
@@ -134,6 +135,10 @@ class JarvisSession:
 
                     # --- Manual VAD Logic REMOVED (Reverting to Auto VAD) ---
 
+                    # IGNORE INPUT IF MODEL IS RESPONDING (Disable Barge-In)
+                    if self.is_responding:
+                        continue
+
                     b64_audio = base64.b64encode(audio_data).decode("utf-8")
                     
                     realtime_input = {
@@ -183,6 +188,9 @@ class JarvisSession:
                 if server_content:
                     model_turn = server_content.get("modelTurn")
                     if model_turn:
+                        # If the model is sending content, it is responding.
+                        self.is_responding = True
+                        
                         parts = model_turn.get("parts", [])
                         for part in parts:
                             if "inlineData" in part:
@@ -206,6 +214,7 @@ class JarvisSession:
                 # Handle Turn Complete
                 if server_content and server_content.get("turnComplete"):
                     print("DEBUG: Google sent Turn Complete -> Forwarding to Client")
+                    self.is_responding = False
                     await self.client_ws.send_text(json.dumps({"type": "turn_complete"}))
 
         except Exception as e:

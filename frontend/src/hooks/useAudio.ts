@@ -21,9 +21,9 @@ export const useAudio = () => {
             deviceId: deviceId ? { exact: deviceId } : undefined,
             channelCount: 1,
             sampleRate: 16000,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
         } 
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -32,6 +32,7 @@ export const useAudio = () => {
       const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)({
           sampleRate: 16000,
       });
+      console.log("DEBUG: AudioContext Sample Rate:", audioContext.sampleRate);
       audioContextRef.current = audioContext;
       
       const source = audioContext.createMediaStreamSource(stream);
@@ -76,10 +77,10 @@ export const useAudio = () => {
              sum += finalData[i] * finalData[i];
         }
         const rms = Math.sqrt(sum / finalData.length);
-        setAudioLevel(Math.min(rms * 5, 1)); 
+        setAudioLevel(Math.min(rms * 10, 1)); 
 
         // Gain
-        const gain = 5.0;
+        const gain = 2.0;
         const pcmData = new Int16Array(finalData.length);
         let pcmSumSq = 0;
         for (let i = 0; i < finalData.length; i++) {
