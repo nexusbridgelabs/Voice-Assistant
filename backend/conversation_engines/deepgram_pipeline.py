@@ -2,10 +2,10 @@ import asyncio
 import json
 import base64
 import re
-from .base import ConversationEngine
-from ..audio_providers.stt.deepgram import DeepgramSTTProvider
-from ..audio_providers.llm.gemini_llm import GeminiLLMProvider
-from ..audio_providers.tts.elevenlabs_tts import ElevenLabsTTSProvider
+from conversation_engines.base import ConversationEngine
+from audio_providers.stt.deepgram import DeepgramSTTProvider
+from audio_providers.llm.gemini_llm import GeminiLLMProvider
+from audio_providers.tts.elevenlabs_tts import ElevenLabsTTSProvider
 
 class DeepgramPipelineEngine(ConversationEngine):
     def __init__(self, system_prompt: str, deepgram_key: str, google_key: str, elevenlabs_key: str):
