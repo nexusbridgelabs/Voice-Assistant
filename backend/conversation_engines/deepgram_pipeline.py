@@ -74,7 +74,10 @@ class DeepgramPipelineEngine(ConversationEngine):
                             if self.turn_task and not self.turn_task.done():
                                 print(f"\n[VAD] Ignoring input '{full_text}' (Agent is active)")
                             else:
+                                print(f"[Pipeline] Starting turn with text: '{full_text}'")
                                 self.turn_task = asyncio.create_task(self.handle_turn(full_text))
+                        else:
+                            print("[Pipeline] UtteranceEnd received but transcript is empty.")
 
         except asyncio.CancelledError:
             pass

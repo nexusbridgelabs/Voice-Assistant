@@ -37,9 +37,11 @@ class DeepgramSTTProvider(STTProvider):
             pass
             
         async def on_utterance_end(self_dg, utterance_end, **kwargs):
+            print("[DeepgramProvider] Event: UtteranceEnd")
             await self.queue.put({"type": "signal", "value": "utterance_end"})
 
         async def on_speech_started(self_dg, speech_started, **kwargs):
+             print("[DeepgramProvider] Event: SpeechStarted")
              await self.queue.put({"type": "signal", "value": "speech_started"})
 
         async def on_error(self_dg, error, **kwargs):

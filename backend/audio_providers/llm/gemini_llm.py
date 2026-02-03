@@ -2,10 +2,12 @@ import os
 from google import genai
 from google.genai import types
 from typing import AsyncGenerator
+import traceback
 from .base import LLMProvider
 
 class GeminiLLMProvider(LLMProvider):
     def __init__(self, api_key: str, system_prompt: str, model_name: str = "gemini-2.0-flash-exp"):
+        print(f"Initializing Gemini LLM with model: {model_name}")
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
         self.system_prompt = system_prompt
@@ -18,7 +20,16 @@ class GeminiLLMProvider(LLMProvider):
         )
 
     async def generate_response(self, text_input: str) -> AsyncGenerator[str, None]:
-        response = await self.chat.send_message_stream(text_input)
-        async for chunk in response:
-            if chunk.text:
-                yield chunk.text
+        print(f"[GeminiLLM] Sending request: '{text_input}'")
+        try:
+            response = await self.chat.send_message_stream(text_input)
+            print("[GeminiLLM] Stream started")
+            async for chunk in response:
+                if chunk.text:
+                    # print(f"[GeminiLLM] Chunk: {chunk.text[:20]}...")
+                    yield chunk.text
+            print("[GeminiLLM] Stream finished")
+        except Exception as e:
+            print(f"[GeminiLLM] Error: {e}")
+            traceback.print_exc()
+            yield f" I'm sorry, I encountered an error: {str(e)}"
