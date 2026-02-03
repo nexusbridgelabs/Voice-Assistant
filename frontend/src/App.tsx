@@ -31,8 +31,9 @@ function App() {
   }, [appState]);
 
   const handleAudioData = useCallback((data: ArrayBuffer) => {
-    // Noise Gate: Filter out fan noise/silence (Threshold: 0.5%)
-    if (audioLevelRef.current < 0.005) return;
+    // Noise Gate Removed: Relying on Deepgram VAD to filter silence
+    // This ensures we capture soft starts like "Hi" or "Can"
+    // if (audioLevelRef.current < 0.005) return;
 
     if (isConnected) {
         sendMessage(data);
