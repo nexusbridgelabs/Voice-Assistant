@@ -145,6 +145,7 @@ class DeepgramPipelineEngine(ConversationEngine):
         try:
             audio_generator = self.tts.stream_audio(sentence)
             chunks_sent = 0
+            total_bytes = 0
             audio_buffer = bytearray()
             MIN_CHUNK_SIZE = 32768 # 32KB buffer (~0.6s at 24kHz 16-bit) to ensure smooth playback
             
@@ -159,6 +160,7 @@ class DeepgramPipelineEngine(ConversationEngine):
                             "data": b64_data
                         }))
                         chunks_sent += 1
+                        total_bytes += len(audio_buffer)
                         audio_buffer = bytearray()
             
             # Send remaining buffer
@@ -169,8 +171,14 @@ class DeepgramPipelineEngine(ConversationEngine):
                     "data": b64_data
                 }))
                 chunks_sent += 1
+                total_bytes += len(audio_buffer)
                 
             print(f"[Pipeline] Sent {chunks_sent} accumulated audio chunks to client")
+
+            # Estimated Playback Duration (24kHz, 16-bit mono = 48000 bytes/sec)
+            playback_duration = total_bytes / 48000.0
+            print(f"[Pipeline] Estimated playback: {playback_duration:.2f}s. Holding turn to prevent echo.")
+            await asyncio.sleep(playback_duration)
             
         except Exception as e:
             print(f"[TTS Error] {e}")
