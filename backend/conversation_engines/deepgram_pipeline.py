@@ -37,20 +37,34 @@ class DeepgramPipelineEngine(ConversationEngine):
         try:
             async for event in self.stt.listen():
                 if event["type"] == "text":
-                    # For interim results, we could just overwrite or append
-                    # Deepgram sends 'is_final' for finalized parts
-                    # We only care about the full transcript for now
-                    if event["is_final"]:
-                        self.current_transcript.append(event["value"])
-                        print(f"Transcript part: {event['value']}")
+                    text = event["value"]
+                    is_final = event.get("is_final", False)
+                    
+                    # Log to terminal
+                    if is_final:
+                        print(f"\n[STT Final] {text}")
+                    else:
+                        # Overwrite line for interim
+                        print(f"\r[STT Interim] {text}", end="", flush=True)
+
+                    # Send to Frontend for Realtime Chat
+                    await self.output_handler(json.dumps({
+                        "type": "transcript",
+                        "text": text,
+                        "is_final": is_final
+                    }))
+
+                    # Accumulate for Turn Processing
+                    if is_final:
+                        self.current_transcript.append(text)
                 
                 elif event["type"] == "signal":
                     if event["value"] == "speech_started":
-                        print("User started speaking -> Interrupting")
+                        print("\n[VAD] User started speaking -> Interrupting")
                         await self.interrupt()
                     
                     elif event["value"] == "utterance_end":
-                        print("User finished speaking -> Processing Turn")
+                        print("\n[VAD] User finished speaking -> Processing Turn")
                         full_text = " ".join(self.current_transcript).strip()
                         self.current_transcript = []
                         if full_text:
@@ -72,7 +86,7 @@ class DeepgramPipelineEngine(ConversationEngine):
         # await self.output_handler(json.dumps({"type": "interrupt"}))
 
     async def handle_turn(self, text: str):
-        print(f"Processing Turn: {text}")
+        print(f"\n[LLM] Generating response for: '{text}'")
         try:
             # 1. Generate Text
             response_stream = self.llm.generate_response(text)
@@ -93,15 +107,16 @@ class DeepgramPipelineEngine(ConversationEngine):
             if buffer.strip():
                 await self.speak_sentence(buffer)
 
+            print("\n[Turn Complete]")
             await self.output_handler(json.dumps({"type": "turn_complete"}))
 
         except asyncio.CancelledError:
-            print("Turn Cancelled")
+            print("\n[Turn Cancelled]")
         except Exception as e:
-            print(f"Turn Error: {e}")
+            print(f"\n[Turn Error] {e}")
 
     async def speak_sentence(self, sentence: str):
-        print(f"Speaking: {sentence}")
+        print(f"\n[TTS] Synthesizing: '{sentence}'")
         # Send text to client for UI
         await self.output_handler(json.dumps({
             "type": "response_chunk",
@@ -119,7 +134,7 @@ class DeepgramPipelineEngine(ConversationEngine):
                         "data": b64_data
                     }))
         except Exception as e:
-            print(f"TTS Error: {e}")
+            print(f"[TTS Error] {e}")
 
     async def end_session(self):
         self.running = False

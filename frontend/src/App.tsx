@@ -91,17 +91,45 @@ function App() {
                     });
                 });
             }
-            else if (data.type === 'transcript') {
-                // User transcript from backend (if available) or intermediate
-                Promise.resolve().then(() => {
-                    setMessages(prev => {
-                        // Logic to update user message ...
-                        // For now, assuming Google doesn't send user transcript often, 
-                        // this might be rare.
-                        return prev;
-                    });
-                });
-            } else if (data.type === 'response_chunk') {
+                        else if (data.type === 'transcript') {
+                            // User transcript from backend
+                            Promise.resolve().then(() => {
+                                setMessages(prev => {
+                                    const lastMsg = prev[prev.length - 1];
+                                    // We modify the last message if it's a partial user message
+                                    const isLastUserPartial = lastMsg?.role === 'user' && lastMsg?.isPartial;
+                                    
+                                    if (isLastUserPartial) {
+                                        // Update existing partial message
+                                        if (data.is_final) {
+                                            return [...prev.slice(0, -1), { 
+                                                ...lastMsg, 
+                                                text: data.text, 
+                                                isPartial: false 
+                                            }];
+                                        } else {
+                                            return [...prev.slice(0, -1), { 
+                                                ...lastMsg, 
+                                                text: data.text 
+                                            }];
+                                        }
+                                    } else {
+                                        // Create new message
+                                        // Only create if text is not empty
+                                        if (!data.text) return prev;
+                                        
+                                        return [...prev, {
+                                            id: Date.now().toString(),
+                                            role: 'user',
+                                            text: data.text,
+                                            timestamp: Date.now(),
+                                            isPartial: !data.is_final
+                                        }];
+                                    }
+                                });
+                            });
+                        }
+             else if (data.type === 'response_chunk') {
                  // Text response from Assistant
                  Promise.resolve().then(() => {
                     setMessages(prev => {
