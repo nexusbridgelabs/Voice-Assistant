@@ -101,21 +101,13 @@ function App() {
                                     
                                     if (isLastUserPartial) {
                                         // Update existing partial message
-                                        if (data.is_final) {
-                                            return [...prev.slice(0, -1), { 
-                                                ...lastMsg, 
-                                                text: data.text, 
-                                                isPartial: false 
-                                            }];
-                                        } else {
-                                            return [...prev.slice(0, -1), { 
-                                                ...lastMsg, 
-                                                text: data.text 
-                                            }];
-                                        }
+                                        // ALWAYS keep isPartial: true until turn ends (Assistant speaks)
+                                        return [...prev.slice(0, -1), { 
+                                            ...lastMsg, 
+                                            text: data.text
+                                        }];
                                     } else {
                                         // Create new message
-                                        // Only create if text is not empty
                                         if (!data.text) return prev;
                                         
                                         return [...prev, {
@@ -123,7 +115,7 @@ function App() {
                                             role: 'user',
                                             text: data.text,
                                             timestamp: Date.now(),
-                                            isPartial: !data.is_final
+                                            isPartial: true
                                         }];
                                     }
                                 });
@@ -134,15 +126,25 @@ function App() {
                  Promise.resolve().then(() => {
                     setMessages(prev => {
                         const lastMsg = prev[prev.length - 1];
-                        const isLastPartial = lastMsg?.role === 'assistant' && lastMsg?.isPartial;
+                        const isAssistantPartial = lastMsg?.role === 'assistant' && lastMsg?.isPartial;
 
-                        if (isLastPartial) {
+                        if (isAssistantPartial) {
+                            // Append to existing Assistant message
                             return [...prev.slice(0, -1), { 
                                 ...lastMsg, 
                                 text: lastMsg.text + data.content 
                             }];
                         } else {
-                            return [...prev, {
+                            // Start new Assistant message
+                            // AND finalize the last User message if it was partial
+                            const updatedPrev = prev.map((msg, idx) => {
+                                if (idx === prev.length - 1 && msg.role === 'user' && msg.isPartial) {
+                                    return { ...msg, isPartial: false };
+                                }
+                                return msg;
+                            });
+
+                            return [...updatedPrev, {
                                 id: Date.now().toString(),
                                 role: 'assistant',
                                 text: data.content,
