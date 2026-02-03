@@ -7,15 +7,11 @@ class ElevenLabsTTSProvider(TTSProvider):
         self.client = AsyncElevenLabs(api_key=api_key)
         self.voice_id = voice_id
 
-        async def stream_audio(self, text_chunk: str) -> AsyncGenerator[bytes, None]:
-
-            """
-
-            Streams audio for a given text chunk (ideally a sentence).
-
-            """
-
-            print(f"[ElevenLabs] Requesting TTS for: '{text_chunk[:20]}...'")
+    async def stream_audio(self, text_chunk: str) -> AsyncGenerator[bytes, None]:
+        """
+        Streams audio for a given text chunk (ideally a sentence).
+        """
+        print(f"[ElevenLabs] Requesting TTS for: '{text_chunk[:20]}...'")
 
             try:
 
