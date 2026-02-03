@@ -60,18 +60,19 @@ class DeepgramPipelineEngine(ConversationEngine):
                 
                 elif event["type"] == "signal":
                     if event["value"] == "speech_started":
-                        print("\n[VAD] User started speaking -> Interrupting")
-                        await self.interrupt()
+                        print("\n[VAD] User started speaking")
+                        # await self.interrupt() # DISABLED: Non-interruptible mode
                     
                     elif event["value"] == "utterance_end":
                         print("\n[VAD] User finished speaking -> Processing Turn")
                         full_text = " ".join(self.current_transcript).strip()
                         self.current_transcript = []
                         if full_text:
-                            # Cancel previous turn if any (though utterance_end usually follows speech)
-                            if self.turn_task:
-                                self.turn_task.cancel()
-                            self.turn_task = asyncio.create_task(self.handle_turn(full_text))
+                            # Check if agent is already speaking/processing
+                            if self.turn_task and not self.turn_task.done():
+                                print(f"\n[VAD] Ignoring input '{full_text}' (Agent is active)")
+                            else:
+                                self.turn_task = asyncio.create_task(self.handle_turn(full_text))
 
         except asyncio.CancelledError:
             pass
