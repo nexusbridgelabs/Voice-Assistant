@@ -28,6 +28,9 @@ class DeepgramPipelineEngine(ConversationEngine):
         print("Deepgram Pipeline Started")
 
     async def process_audio_input(self, audio_data: bytes):
+        if self.turn_task and not self.turn_task.done():
+            # Drop audio to prevent echo/interruption
+            return
         await self.stt.send_audio(audio_data)
 
     async def process_text_input(self, text: str):
