@@ -66,7 +66,8 @@ class DeepgramPipelineEngine(ConversationEngine):
                     if is_final:
                         print(f"\n[STT Final] {text}")
                         # Restart silence timer
-                        if self.silence_timer_task: self.silence_timer_task.cancel()
+                        if self.silence_timer_task:
+                            self.silence_timer_task.cancel()
                         self.silence_timer_task = asyncio.create_task(self._silence_timer(1.2))
                     else:
                         print(f"\r[STT Interim] {text}", end="", flush=True)
@@ -84,12 +85,14 @@ class DeepgramPipelineEngine(ConversationEngine):
                     if event["value"] == "speech_started":
                         print("\n[VAD] User started speaking")
                         # Cancel silence timer
-                        if self.silence_timer_task: self.silence_timer_task.cancel()
+                        if self.silence_timer_task:
+                            self.silence_timer_task.cancel()
                     
                     elif event["value"] == "utterance_end":
                         print("\n[VAD] Deepgram UtteranceEnd -> Processing Turn")
                         # Cancel silence timer (we are handling it now)
-                        if self.silence_timer_task: self.silence_timer_task.cancel()
+                        if self.silence_timer_task:
+                            self.silence_timer_task.cancel()
                         await self.process_turn_logic()
 
         except asyncio.CancelledError:
@@ -142,10 +145,24 @@ class DeepgramPipelineEngine(ConversationEngine):
         except Exception as e:
             print(f"[TTS Error] {e}")
 
-    async def end_session(self):
-        self.running = False
-        if self.orchestrator_task: self.orchestrator_task.cancel()
-        if self.turn_task: self.turn_task.cancel()
-        if self.silence_timer_task: self.silence_timer_task.cancel()
-        await self.stt.close()
-        print("Pipeline Session Ended")
+        async def end_session(self):
+
+            self.running = False
+
+            if self.orchestrator_task:
+
+                self.orchestrator_task.cancel()
+
+            if self.turn_task:
+
+                self.turn_task.cancel()
+
+            if self.silence_timer_task:
+
+                self.silence_timer_task.cancel()
+
+            await self.stt.close()
+
+            print("Pipeline Session Ended")
+
+    

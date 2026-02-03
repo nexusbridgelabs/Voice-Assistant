@@ -1,6 +1,4 @@
-import os
 import asyncio
-import json
 from deepgram import (
     DeepgramClient,
     DeepgramClientOptions,

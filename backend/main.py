@@ -1,6 +1,4 @@
 import os
-import json
-import asyncio
 import struct
 import math
 import time
@@ -8,7 +6,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from conversation_engines.gemini_live import GeminiLiveEngine
+from conversation_engines.factory import EngineFactory
 
 load_dotenv()
 
@@ -46,10 +44,9 @@ app.add_middleware(
 class JarvisSession:
     def __init__(self, websocket: WebSocket):
         self.client_ws = websocket
-        # Initialize the specific engine (Gemini Live for now)
-        self.engine = GeminiLiveEngine(
-            system_prompt=SYSTEM_PROMPT, 
-            google_api_key=GOOGLE_API_KEY
+        # Initialize the engine via Factory
+        self.engine = EngineFactory.create_engine(
+            system_prompt=SYSTEM_PROMPT
         )
 
     async def run(self):
