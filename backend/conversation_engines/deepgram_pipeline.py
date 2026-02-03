@@ -135,6 +135,7 @@ class DeepgramPipelineEngine(ConversationEngine):
 
         try:
             audio_generator = self.tts.stream_audio(sentence)
+            chunks_sent = 0
             async for audio_chunk in audio_generator:
                 if audio_chunk:
                     b64_data = base64.b64encode(audio_chunk).decode("utf-8")
@@ -142,6 +143,9 @@ class DeepgramPipelineEngine(ConversationEngine):
                         "type": "audio",
                         "data": b64_data
                     }))
+                    chunks_sent += 1
+            print(f"[Pipeline] Sent {chunks_sent} audio chunks to client")
+            
         except Exception as e:
             print(f"[TTS Error] {e}")
 
