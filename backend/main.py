@@ -1,16 +1,14 @@
 import os
 import json
 import asyncio
-import base64
-import websockets
-import traceback
-import websockets.exceptions
 import struct
 import math
 import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+
+from conversation_engines.gemini_live import GeminiLiveEngine
 
 load_dotenv()
 
@@ -48,193 +46,54 @@ app.add_middleware(
 class JarvisSession:
     def __init__(self, websocket: WebSocket):
         self.client_ws = websocket
-        self.google_ws = None
-        self.running = False
-        self.is_responding = False
+        # Initialize the specific engine (Gemini Live for now)
+        self.engine = GeminiLiveEngine(
+            system_prompt=SYSTEM_PROMPT, 
+            google_api_key=GOOGLE_API_KEY
+        )
 
-    async def connect(self):
+    async def run(self):
         await self.client_ws.accept()
         print("Client Connected.")
-        
-        # Connect to Google Live API
-        url = f"wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={GOOGLE_API_KEY}"
+
         try:
-            self.google_ws = await websockets.connect(url)
-            print("Connected to Google Live API")
-            await self.send_setup()
-            self.running = True
-        except websockets.exceptions.InvalidStatusCode as e:
-            print(f"Google Connection Failed: Status {e.status_code}")
-            print(f"Headers: {e.headers}")
-            await self.client_ws.close(code=1011, reason=f"Google API Error: {e.status_code}")
-        except Exception as e:
-            print(f"Google Connection Error: {e}")
-            traceback.print_exc()
-            await self.client_ws.close(code=1011, reason=str(e))
-
-    async def send_setup(self):
-        setup_msg = {
-            "setup": {
-                "model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
-                "generationConfig": {
-                    "responseModalities": ["AUDIO"],
-                    "speechConfig": {
-                        "voiceConfig": {
-                            "prebuiltVoiceConfig": {
-                                "voiceName": "Puck"
-                            }
-                        }
-                    }
-                },
-                "realtimeInputConfig": {
-                    "automaticActivityDetection": {}
-                },
-                "inputAudioTranscription": {}, 
-                "systemInstruction": {
-                    "parts": [{"text": "Please converse in English. " + SYSTEM_PROMPT}]
-                }
-            }
-        }
-        await self.google_ws.send(json.dumps(setup_msg))
-
-    async def send_client_content(self):
-        # We can send this to signal turn end if we want, but VAD should do it.
-        pass
-
-    async def handle_client_messages(self):
-        try:
-            while self.running:
+            # Start the engine
+            await self.engine.start_session(output_handler=self.client_ws.send_text)
+            
+            # Loop to handle messages from the client (React App)
+            while True:
                 message = await self.client_ws.receive()
                 
                 if "bytes" in message:
-                    # Audio chunk from client (PCM 16kHz expected)
+                    # Audio chunk from client
                     audio_data = message["bytes"]
                     
-                    # DEBUG: Save to file
-                    try:
-                        with open("test_write/debug_input.pcm", "ab") as f:
-                            f.write(audio_data)
-                    except Exception as e:
-                        print(f"File Write Error: {e}")
-
-                    # print(f"DEBUG: Received audio chunk {len(audio_data)} bytes") 
-                    
-                    # Calculate RMS
-                    rms = 0
+                    # --- Debugging (RMS) ---
                     try:
                         count = len(audio_data) // 2
                         shorts = struct.unpack(f'<{count}h', audio_data)
                         sum_squares = sum(s**2 for s in shorts)
                         rms = math.sqrt(sum_squares / count)
-                        
-                        # Debug RMS every ~50 chunks
                         if int(time.time() * 20) % 50 == 0:
                              print(f"DEBUG: RMS: {rms:.0f}")
-                    except Exception as e:
-                         print(f"RMS Calc Error: {e}")
-
-                    # --- Manual VAD Logic REMOVED (Reverting to Auto VAD) ---
-
-                    # IGNORE INPUT IF MODEL IS RESPONDING (Disable Barge-In)
-                    if self.is_responding:
-                        continue
-
-                    b64_audio = base64.b64encode(audio_data).decode("utf-8")
+                    except Exception:
+                         pass
                     
-                    realtime_input = {
-                        "realtimeInput": {
-                            "mediaChunks": [{
-                                "mimeType": "audio/pcm;rate=16000",
-                                "data": b64_audio
-                            }]
-                        }
-                    }
-                    await self.google_ws.send(json.dumps(realtime_input))
-                    # print("DEBUG: Sent chunk to Google")
-                    
+                    # Pass audio to engine
+                    await self.engine.process_audio_input(audio_data)
+
                 elif "text" in message:
-                    # Handle text messages if needed (e.g. config updates)
+                    # Pass text to engine (if applicable)
+                    # await self.engine.process_text_input(message["text"])
                     pass
 
         except WebSocketDisconnect:
             print("Client disconnected")
         except Exception as e:
-            print(f"Client Loop Error: {e}")
+            print(f"Session Error: {e}")
         finally:
-            self.running = False
-            if self.google_ws:
-                await self.google_ws.close()
+            await self.engine.end_session()
 
-    async def handle_google_messages(self):
-        try:
-            async for raw_msg in self.google_ws:
-                if not self.running:
-                    break
-                
-                print(f"DEBUG: Received from Google: {len(raw_msg)} bytes")
-                response = json.loads(raw_msg)
-                print(f"DEBUG: Google Message Keys: {response.keys()}")
-                
-                if response.get("setupComplete"):
-                    print(f"DEBUG: Setup Complete: {response}")
-                
-                # Handle Transcriptions
-                transcription = response.get("audioTranscription")
-                if transcription:
-                    print(f"USER SAID: {transcription.get('text')}")
-
-                # Extract Audio
-                server_content = response.get("serverContent")
-                if server_content:
-                    model_turn = server_content.get("modelTurn")
-                    if model_turn:
-                        # If the model is sending content, it is responding.
-                        self.is_responding = True
-                        
-                        parts = model_turn.get("parts", [])
-                        for part in parts:
-                            if "inlineData" in part:
-                                # Received Audio
-                                b64_data = part["inlineData"]["data"]
-                                # print(f"DEBUG: Received Audio Part (len={len(b64_data)})")
-                                # Send back to client as base64 or bytes?
-                                # Let's send as JSON with type "audio" for frontend to handle
-                                await self.client_ws.send_text(json.dumps({
-                                    "type": "audio",
-                                    "data": b64_data
-                                }))
-                            elif "text" in part:
-                                # Received Text
-                                print(f"DEBUG: Received Text Part: {part['text'][:100]}...")
-                                await self.client_ws.send_text(json.dumps({
-                                    "type": "response_chunk",
-                                    "content": part["text"]
-                                }))
-                
-                # Handle Turn Complete
-                if server_content and server_content.get("turnComplete"):
-                    print("DEBUG: Google sent Turn Complete -> Forwarding to Client")
-                    self.is_responding = False
-                    await self.client_ws.send_text(json.dumps({"type": "turn_complete"}))
-
-        except Exception as e:
-            print(f"Google Loop Error: {e}")
-        finally:
-            print("DEBUG: Google Loop Exited")
-            self.running = False
-            try:
-                await self.client_ws.close()
-            except Exception:
-                pass
-
-    async def run(self):
-        await self.connect()
-        if self.running:
-            # Run both loops concurrently
-            await asyncio.gather(
-                self.handle_client_messages(),
-                self.handle_google_messages()
-            )
 
 @app.get("/")
 async def root():
