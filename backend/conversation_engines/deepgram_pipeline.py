@@ -177,8 +177,11 @@ class DeepgramPipelineEngine(ConversationEngine):
 
             # Estimated Playback Duration (24kHz, 16-bit mono = 48000 bytes/sec)
             playback_duration = total_bytes / 48000.0
-            print(f"[Pipeline] Estimated playback: {playback_duration:.2f}s. Holding turn to prevent echo.")
-            await asyncio.sleep(playback_duration)
+            safety_buffer = 2.0  # Add 2s for network latency/frontend buffering
+            total_sleep = playback_duration + safety_buffer
+            
+            print(f"[Pipeline] Estimated playback: {playback_duration:.2f}s + {safety_buffer}s buffer. Holding turn.")
+            await asyncio.sleep(total_sleep)
             
         except Exception as e:
             print(f"[TTS Error] {e}")
