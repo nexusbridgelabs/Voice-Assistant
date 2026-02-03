@@ -57,6 +57,12 @@ class DeepgramPipelineEngine(ConversationEngine):
     async def orchestrate(self):
         try:
             async for event in self.stt.listen():
+                # ECHO CANCELLATION: Ignore all input if Agent is active
+                if self.turn_task and not self.turn_task.done():
+                    if event["type"] == "text" and event.get("is_final"):
+                         print(f"\n[Echo Block] Ignored text: '{event['value']}'")
+                    continue
+
                 if event["type"] == "text":
                     text = event["value"]
                     is_final = event.get("is_final", False)
