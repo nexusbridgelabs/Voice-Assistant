@@ -31,8 +31,8 @@ function App() {
   }, [appState]);
 
   const handleAudioData = useCallback((data: ArrayBuffer) => {
-    // Noise Gate: Filter out fan noise/silence (Threshold: 1%)
-    if (audioLevelRef.current < 0.01) return;
+    // Noise Gate: Filter out fan noise/silence (Threshold: 0.5%)
+    if (audioLevelRef.current < 0.005) return;
 
     if (isConnected) {
         sendMessage(data);

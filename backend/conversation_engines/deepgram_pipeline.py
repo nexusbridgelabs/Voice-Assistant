@@ -40,17 +40,19 @@ class DeepgramPipelineEngine(ConversationEngine):
                     text = event["value"]
                     is_final = event.get("is_final", False)
                     
+                    # Construct full text for display (Previous finalized parts + current part)
+                    current_turn_text = " ".join(self.current_transcript + [text])
+
                     # Log to terminal
                     if is_final:
                         print(f"\n[STT Final] {text}")
                     else:
-                        # Overwrite line for interim
                         print(f"\r[STT Interim] {text}", end="", flush=True)
 
                     # Send to Frontend for Realtime Chat
                     await self.output_handler(json.dumps({
                         "type": "transcript",
-                        "text": text,
+                        "text": current_turn_text,
                         "is_final": is_final
                     }))
 
