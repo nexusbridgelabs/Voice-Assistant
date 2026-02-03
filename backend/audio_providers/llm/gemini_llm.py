@@ -11,8 +11,8 @@ class GeminiLLMProvider(LLMProvider):
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
         self.system_prompt = system_prompt
-        # Create a chat session
-        self.chat = self.client.chats.create(
+        # Create a chat session using the Async client
+        self.chat = self.client.aio.chats.create(
             model=self.model_name,
             config=types.GenerateContentConfig(
                 system_instruction=self.system_prompt
