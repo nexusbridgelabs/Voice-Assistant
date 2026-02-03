@@ -5,3 +5,6 @@ websockets
 google-genai
 numpy
 httpx
+deepgram-sdk
+elevenlabs
+openai
