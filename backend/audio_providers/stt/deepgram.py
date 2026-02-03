@@ -60,7 +60,7 @@ class DeepgramSTTProvider(STTProvider):
             smart_format=True,
             interim_results=True,
             vad_events=True,
-            utterance_end_ms=1500,
+            utterance_end_ms=1000,
             encoding="linear16",
             sample_rate=16000,
             channels=1

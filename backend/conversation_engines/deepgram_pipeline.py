@@ -18,6 +18,7 @@ class DeepgramPipelineEngine(ConversationEngine):
         self.current_transcript = []
         self.orchestrator_task = None
         self.turn_task = None
+        self.silence_timer_task = None
 
     async def start_session(self, output_handler):
         self.output_handler = output_handler
@@ -30,8 +31,28 @@ class DeepgramPipelineEngine(ConversationEngine):
         await self.stt.send_audio(audio_data)
 
     async def process_text_input(self, text: str):
-        # Handle text input as a turn
         await self.handle_turn(text)
+
+    async def _silence_timer(self, duration=1.2):
+        try:
+            await asyncio.sleep(duration)
+            print("\n[Pipeline] Silence timeout -> Forcing Turn")
+            await self.process_turn_logic()
+        except asyncio.CancelledError:
+            pass
+
+    async def process_turn_logic(self):
+        full_text = " ".join(self.current_transcript).strip()
+        self.current_transcript = []
+        if full_text:
+            if self.turn_task and not self.turn_task.done():
+                print(f"\n[VAD] Ignoring input '{full_text}' (Agent is active)")
+            else:
+                print(f"[Pipeline] Starting turn with text: '{full_text}'")
+                self.turn_task = asyncio.create_task(self.handle_turn(full_text))
+        else:
+            # Only log if we expected something, to avoid noise
+            pass
 
     async def orchestrate(self):
         try:
@@ -40,71 +61,52 @@ class DeepgramPipelineEngine(ConversationEngine):
                     text = event["value"]
                     is_final = event.get("is_final", False)
                     
-                    # Construct full text for display (Previous finalized parts + current part)
                     current_turn_text = " ".join(self.current_transcript + [text])
 
-                    # Log to terminal
                     if is_final:
                         print(f"\n[STT Final] {text}")
+                        # Restart silence timer
+                        if self.silence_timer_task: self.silence_timer_task.cancel()
+                        self.silence_timer_task = asyncio.create_task(self._silence_timer(1.2))
                     else:
                         print(f"\r[STT Interim] {text}", end="", flush=True)
 
-                    # Send to Frontend for Realtime Chat
                     await self.output_handler(json.dumps({
                         "type": "transcript",
                         "text": current_turn_text,
                         "is_final": is_final
                     }))
 
-                    # Accumulate for Turn Processing
                     if is_final:
                         self.current_transcript.append(text)
                 
                 elif event["type"] == "signal":
                     if event["value"] == "speech_started":
                         print("\n[VAD] User started speaking")
-                        # await self.interrupt() # DISABLED: Non-interruptible mode
+                        # Cancel silence timer
+                        if self.silence_timer_task: self.silence_timer_task.cancel()
                     
                     elif event["value"] == "utterance_end":
-                        print("\n[VAD] User finished speaking -> Processing Turn")
-                        full_text = " ".join(self.current_transcript).strip()
-                        self.current_transcript = []
-                        if full_text:
-                            # Check if agent is already speaking/processing
-                            if self.turn_task and not self.turn_task.done():
-                                print(f"\n[VAD] Ignoring input '{full_text}' (Agent is active)")
-                            else:
-                                print(f"[Pipeline] Starting turn with text: '{full_text}'")
-                                self.turn_task = asyncio.create_task(self.handle_turn(full_text))
-                        else:
-                            print("[Pipeline] UtteranceEnd received but transcript is empty.")
+                        print("\n[VAD] Deepgram UtteranceEnd -> Processing Turn")
+                        # Cancel silence timer (we are handling it now)
+                        if self.silence_timer_task: self.silence_timer_task.cancel()
+                        await self.process_turn_logic()
 
         except asyncio.CancelledError:
             pass
         except Exception as e:
             print(f"Orchestrator Error: {e}")
 
-    async def interrupt(self):
-        if self.turn_task:
-            self.turn_task.cancel()
-            self.turn_task = None
-        # Also maybe clear audio queue on client?
-        # await self.output_handler(json.dumps({"type": "interrupt"}))
-
     async def handle_turn(self, text: str):
         print(f"\n[LLM] Generating response for: '{text}'")
         try:
-            # 1. Generate Text
             response_stream = self.llm.generate_response(text)
             
-            # 2. Buffer sentences and Synthesize
             buffer = ""
             async for chunk in response_stream:
                 buffer += chunk
-                # Simple sentence split (can be improved)
                 sentences = re.split(r'(?<=[.!?])\s+', buffer)
                 if len(sentences) > 1:
-                    # We have complete sentences
                     for sentence in sentences[:-1]:
                         if sentence.strip():
                              await self.speak_sentence(sentence)
@@ -123,13 +125,11 @@ class DeepgramPipelineEngine(ConversationEngine):
 
     async def speak_sentence(self, sentence: str):
         print(f"\n[TTS] Synthesizing: '{sentence}'")
-        # Send text to client for UI
         await self.output_handler(json.dumps({
             "type": "response_chunk",
             "content": sentence + " "
         }))
 
-        # Stream audio
         try:
             audio_generator = self.tts.stream_audio(sentence)
             async for audio_chunk in audio_generator:
@@ -144,9 +144,8 @@ class DeepgramPipelineEngine(ConversationEngine):
 
     async def end_session(self):
         self.running = False
-        if self.orchestrator_task:
-            self.orchestrator_task.cancel()
-        if self.turn_task:
-            self.turn_task.cancel()
+        if self.orchestrator_task: self.orchestrator_task.cancel()
+        if self.turn_task: self.turn_task.cancel()
+        if self.silence_timer_task: self.silence_timer_task.cancel()
         await self.stt.close()
         print("Pipeline Session Ended")
