@@ -136,15 +136,32 @@ class DeepgramPipelineEngine(ConversationEngine):
         try:
             audio_generator = self.tts.stream_audio(sentence)
             chunks_sent = 0
+            audio_buffer = bytearray()
+            MIN_CHUNK_SIZE = 32768 # 32KB buffer (~0.6s at 24kHz 16-bit) to ensure smooth playback
+            
             async for audio_chunk in audio_generator:
                 if audio_chunk:
-                    b64_data = base64.b64encode(audio_chunk).decode("utf-8")
-                    await self.output_handler(json.dumps({
-                        "type": "audio",
-                        "data": b64_data
-                    }))
-                    chunks_sent += 1
-            print(f"[Pipeline] Sent {chunks_sent} audio chunks to client")
+                    audio_buffer.extend(audio_chunk)
+                    
+                    if len(audio_buffer) >= MIN_CHUNK_SIZE:
+                        b64_data = base64.b64encode(audio_buffer).decode("utf-8")
+                        await self.output_handler(json.dumps({
+                            "type": "audio",
+                            "data": b64_data
+                        }))
+                        chunks_sent += 1
+                        audio_buffer = bytearray()
+            
+            # Send remaining buffer
+            if len(audio_buffer) > 0:
+                b64_data = base64.b64encode(audio_buffer).decode("utf-8")
+                await self.output_handler(json.dumps({
+                    "type": "audio",
+                    "data": b64_data
+                }))
+                chunks_sent += 1
+                
+            print(f"[Pipeline] Sent {chunks_sent} accumulated audio chunks to client")
             
         except Exception as e:
             print(f"[TTS Error] {e}")
