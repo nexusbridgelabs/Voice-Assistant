@@ -14,7 +14,7 @@ class ElevenLabsTTSProvider(TTSProvider):
         print(f"[ElevenLabs] Requesting TTS for: '{text_chunk[:20]}...'")
 
         try:
-            audio_stream = await self.client.text_to_speech.convert(
+            audio_stream = self.client.text_to_speech.convert(
                 text=text_chunk,
                 voice_id=self.voice_id,
                 model_id="eleven_turbo_v2_5",
