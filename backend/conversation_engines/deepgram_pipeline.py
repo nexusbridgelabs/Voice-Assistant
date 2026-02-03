@@ -149,24 +149,15 @@ class DeepgramPipelineEngine(ConversationEngine):
         except Exception as e:
             print(f"[TTS Error] {e}")
 
-        async def end_session(self):
-
-            self.running = False
-
-            if self.orchestrator_task:
-
-                self.orchestrator_task.cancel()
-
-            if self.turn_task:
-
-                self.turn_task.cancel()
-
-            if self.silence_timer_task:
-
-                self.silence_timer_task.cancel()
-
-            await self.stt.close()
-
-            print("Pipeline Session Ended")
+    async def end_session(self):
+        self.running = False
+        if self.orchestrator_task:
+            self.orchestrator_task.cancel()
+        if self.turn_task:
+            self.turn_task.cancel()
+        if self.silence_timer_task:
+            self.silence_timer_task.cancel()
+        await self.stt.close()
+        print("Pipeline Session Ended")
 
     
