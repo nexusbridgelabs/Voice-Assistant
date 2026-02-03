@@ -224,7 +224,7 @@ class JarvisSession:
             self.running = False
             try:
                 await self.client_ws.close()
-            except:
+            except Exception:
                 pass
 
     async def run(self):
