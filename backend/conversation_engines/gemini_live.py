@@ -91,7 +91,17 @@ class GeminiLiveEngine(ConversationEngine):
         if num_samples > 0:
             samples = struct.unpack(f'<{num_samples}h', audio_to_send)
             rms = (sum(s*s for s in samples) / num_samples) ** 0.5
-            print(f"[Gemini Input] {len(audio_to_send)} bytes, {num_samples} samples, RMS: {rms:.0f}")
+            # print(f"[Gemini Input] {len(audio_to_send)} bytes, {num_samples} samples, RMS: {rms:.0f}")
+
+            # MANUAL BARGE-IN: If volume is high enough while responding, interrupt
+            if self.is_responding and rms > 800: # Threshold matching debug panel
+                print(f"[Barge-In] Local VAD detected speech (RMS: {rms:.0f}) -> Interrupting")
+                self.is_responding = False
+                self.audio_buffer = bytearray()
+                # Send stop to frontend
+                asyncio.create_task(self.output_handler(json.dumps({"type": "stop_audio"})))
+                # We don't need to send anything special to Google; 
+                # just sending new audio chunks usually triggers their VAD too.
 
         b64_audio = base64.b64encode(audio_to_send).decode("utf-8")
         
