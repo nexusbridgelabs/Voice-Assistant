@@ -15,7 +15,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>();
   
-  const { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio } = useAudio();
+  const { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio, getPlaybackRemainingTime } = useAudio();
   const { isConnected, sendMessage, lastMessage } = useWebSocket('ws://localhost:8000/ws');
   
   // Ref to access current state/level in callbacks without dependency issues (Stale Closure Fix)
@@ -83,17 +83,21 @@ function App() {
                 Promise.resolve().then(() => setAppState('speaking'));
             }
             else if (data.type === 'turn_complete') {
-                Promise.resolve().then(() => {
-                    playAccumulatedAudio(); // Play all buffered audio as WAV
-                    setAppState('listening');
-                    setMessages(prev => {
-                        const last = prev[prev.length - 1];
-                        if (last && last.role === 'assistant') {
-                            return [...prev.slice(0, -1), { ...last, isPartial: false }];
-                        }
-                        return prev;
+                const remainingTime = getPlaybackRemainingTime();
+                const delayMs = Math.max(0, remainingTime * 1000);
+                
+                setTimeout(() => {
+                    Promise.resolve().then(() => {
+                        setAppState('listening');
+                        setMessages(prev => {
+                            const last = prev[prev.length - 1];
+                            if (last && last.role === 'assistant') {
+                                return [...prev.slice(0, -1), { ...last, isPartial: false }];
+                            }
+                            return prev;
+                        });
                     });
-                });
+                }, delayMs);
             }
                         else if (data.type === 'transcript') {
                             // User transcript from backend

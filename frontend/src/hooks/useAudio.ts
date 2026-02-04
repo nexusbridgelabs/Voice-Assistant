@@ -281,5 +281,11 @@ export const useAudio = () => {
     };
   }, [stopListening]);
 
-  return { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio };
+  const getPlaybackRemainingTime = useCallback(() => {
+    if (!playbackContextRef.current) return 0;
+    const remaining = nextPlayTimeRef.current - playbackContextRef.current.currentTime;
+    return Math.max(0, remaining);
+  }, []);
+
+  return { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio, getPlaybackRemainingTime };
 };
