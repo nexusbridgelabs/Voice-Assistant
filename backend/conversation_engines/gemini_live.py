@@ -167,6 +167,10 @@ class GeminiLiveEngine(ConversationEngine):
 
                         parts = model_turn.get("parts", [])
                         for part in parts:
+                            # Drop data if we've been interrupted since the loop started
+                            if not self.is_responding:
+                                break
+
                             if "inlineData" in part:
                                 # Received Audio - buffer it for smooth playback
                                 raw_audio = base64.b64decode(part["inlineData"]["data"])
@@ -174,11 +178,12 @@ class GeminiLiveEngine(ConversationEngine):
 
                                 # Send when buffer is large enough
                                 if len(self.audio_buffer) >= self.MIN_AUDIO_BUFFER_SIZE:
-                                    b64_data = base64.b64encode(self.audio_buffer).decode("utf-8")
-                                    await self.output_handler(json.dumps({
-                                        "type": "audio",
-                                        "data": b64_data
-                                    }))
+                                    if self.is_responding:
+                                        b64_data = base64.b64encode(self.audio_buffer).decode("utf-8")
+                                        await self.output_handler(json.dumps({
+                                            "type": "audio",
+                                            "data": b64_data
+                                        }))
                                     self.audio_buffer = bytearray()
                             elif "text" in part:
                                 # Received Text

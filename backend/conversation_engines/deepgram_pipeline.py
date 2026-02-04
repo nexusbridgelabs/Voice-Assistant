@@ -70,6 +70,10 @@ class DeepgramPipelineEngine(ConversationEngine):
             if self.turn_task and not self.turn_task.done():
                 print(f"\n[Barge-In] Interrupting current turn for: '{full_text}'")
                 self.turn_task.cancel()
+                try:
+                    await self.turn_task # Wait for cancellation to complete
+                except asyncio.CancelledError:
+                    pass
                 if self.output_handler:
                     await self.output_handler(json.dumps({"type": "stop_audio"}))
             
