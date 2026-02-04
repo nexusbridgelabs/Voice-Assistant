@@ -75,6 +75,14 @@ class DeepgramSTTProvider(STTProvider):
         if self.connection and self.running:
             await self.connection.send(audio_chunk)
 
+    async def send_keepalive(self):
+        """Send a keepalive message to prevent Deepgram timeout."""
+        if self.connection and self.running:
+            try:
+                await self.connection.keep_alive()
+            except Exception as e:
+                print(f"[Deepgram] Keepalive failed: {e}")
+
     async def listen(self):
         while self.running:
             try:
