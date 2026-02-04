@@ -95,11 +95,11 @@ class GeminiLiveEngine(ConversationEngine):
             # print(f"[Gemini Input] {len(audio_to_send)} bytes, {num_samples} samples, RMS: {rms:.0f}")
 
             # MANUAL BARGE-IN: If volume is high enough while responding, interrupt
-            # Require 3 consecutive hits (approx 60ms of audio) above threshold to filter noise
+            # Require 7 consecutive hits (approx 220ms of audio) above threshold to filter noise
             if self.is_responding and rms > 1000: 
                 self.interruption_hits += 1
-                if self.interruption_hits >= 3:
-                    print(f"[Barge-In] Local VAD verified speech (RMS: {rms:.0f}) -> Interrupting")
+                if self.interruption_hits >= 7:
+                    print(f"[Barge-In] Local VAD verified sustained speech (RMS: {rms:.0f}) -> Interrupting")
                     self.is_responding = False
                     self.interruption_hits = 0
                     self.audio_buffer = bytearray()

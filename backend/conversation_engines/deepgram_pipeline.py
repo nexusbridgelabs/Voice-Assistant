@@ -31,6 +31,7 @@ class DeepgramPipelineEngine(ConversationEngine):
         self.turn_task = None
         self.silence_timer_task = None
         self.keepalive_task = None
+        self.interruption_hits = 0
 
     async def start_session(self, output_handler):
         self.output_handler = output_handler
@@ -40,7 +41,27 @@ class DeepgramPipelineEngine(ConversationEngine):
         print("Deepgram Pipeline Started")
 
     async def process_audio_input(self, audio_data: bytes):
-        # Allow audio input even during agent turn to support Barge-In
+        # Local RMS check for fast verified barge-in
+        import struct
+        import math
+        count = len(audio_data) // 2
+        if count > 0:
+            shorts = struct.unpack(f'<{count}h', audio_data)
+            sum_sq = sum(s**2 for s in shorts)
+            rms = math.sqrt(sum_sq / count)
+            
+            # If agent is speaking and we see sustained volume, interrupt
+            if self.turn_task and not self.turn_task.done() and rms > 1000:
+                self.interruption_hits += 1
+                if self.interruption_hits >= 7: # ~200ms of speech
+                    print(f"[Barge-In] Local VAD verified sustained speech (RMS: {rms:.0f}) -> Stopping playback")
+                    self.interruption_hits = 0
+                    if self.output_handler:
+                        await self.output_handler(json.dumps({"type": "stop_audio"}))
+            else:
+                self.interruption_hits = 0
+
+        # Allow audio input even during agent turn to support Deepgram's own VAD/STT
         await self.stt.send_audio(audio_data)
 
     async def process_text_input(self, text: str):
@@ -127,11 +148,7 @@ class DeepgramPipelineEngine(ConversationEngine):
                     
                     elif event["value"] == "utterance_end":
                         print("\n[VAD] Deepgram UtteranceEnd -> Processing Turn")
-                        # BARGE-IN: Interrupt if agent is active
-                        if self.turn_task and not self.turn_task.done():
-                            print("[Barge-In] Utterance verified -> Stopping playback")
-                            if self.output_handler:
-                                await self.output_handler(json.dumps({"type": "stop_audio"}))
+                        # Turn transition logic remains here, but interruption is handled in process_audio_input
                         
                         # Cancel silence timer (we are handling it now)
                         if self.silence_timer_task:
