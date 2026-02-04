@@ -1,6 +1,6 @@
-# JARVIS Voice Assistant
+# DONNA Voice Assistant
 
-JARVIS is a sophisticated, highly interactive voice assistant featuring a futuristic 3D visual interface. It is designed to be a "living" digital companion with a distinct personality, capable of real-time, interruptible conversation.
+DONNA is a sophisticated, highly interactive voice assistant featuring a futuristic 3D visual interface. It is designed to be a "living" digital companion with a distinct personality, capable of real-time, interruptible conversation.
 
 ## 🚀 Features
 
@@ -93,7 +93,7 @@ npm run dev   # Start the dev server
 
 1.  Open your browser to the Frontend URL.
 2.  Click the **Microphone Icon** in the top right to select your input device.
-3.  Click the **Power Icon** in the center bottom to wake JARVIS.
+3.  Click the **Power Icon** in the center bottom to wake DONNA.
 4.  Speak to the sphere!
 
 ## 📂 Project Structure

@@ -62,7 +62,7 @@ class GeminiLiveEngine(ConversationEngine):
                 },
                 "inputAudioTranscription": {}, 
                 "systemInstruction": {
-                    "parts": [{"text": "You are JARVIS. Always respond in English only. The user speaks English."}]
+                    "parts": [{"text": "You are DONNA. Always respond in English only. The user speaks English."}]
                 }
             }
         }

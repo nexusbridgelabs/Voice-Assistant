@@ -1,7 +1,7 @@
-# Product Requirements Document (PRD): JARVIS Voice Assistant
+# Product Requirements Document (PRD): DONNA Voice Assistant
 
 ## 1. Project Overview
-JARVIS is a high-tech, sophisticated voice assistant with a visually immersive React-based frontend. It is designed to be more than a simple command executor; it acts as a proactive, personable, and intelligent companion. Key differentiators include a "nebulous" 3D visualization of the agent's state, smart voice activity detection (VAD) that understands natural conversational pauses, and full interruptibility ("barge-in") capability.
+DONNA is a high-tech, sophisticated voice assistant with a visually immersive React-based frontend. It is designed to be more than a simple command executor; it acts as a proactive, personable, and intelligent companion. Key differentiators include a "nebulous" 3D visualization of the agent's state, smart voice activity detection (VAD) that understands natural conversational pauses, and full interruptibility ("barge-in") capability.
 
 ## 2. Core Features
 
@@ -28,7 +28,7 @@ JARVIS is a high-tech, sophisticated voice assistant with a visually immersive R
 *   **Latency:** Minimal latency is critical for a "real-time" feel.
 
 ### 2.3. Intelligence & Personality
-*   **Identity:** "JARVIS" - Helpful, honest, capable of sarcasm and "tough love."
+*   **Identity:** "DONNA" - Helpful, honest, capable of sarcasm and "tough love."
 *   **Configuration:**
     *   `SOUL.md`: Defines personality, tone, and behavioral nuances.
     *   `RULES.md`: Defines hard constraints and safety protocols.

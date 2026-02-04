@@ -3,12 +3,12 @@ import { useFrame } from '@react-three/fiber';
 import { Sphere, MeshDistortMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 
-interface JarvisSphereProps {
+interface DonnaSphereProps {
   state: 'idle' | 'listening' | 'processing' | 'speaking';
   audioLevel: number;
 }
 
-export const JarvisSphere = ({ state, audioLevel }: JarvisSphereProps) => {
+export const DonnaSphere = ({ state, audioLevel }: DonnaSphereProps) => {
   const meshRef = useRef<THREE.Mesh>(null);
 
   useFrame((stateContext) => {

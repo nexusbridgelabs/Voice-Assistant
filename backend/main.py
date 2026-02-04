@@ -26,7 +26,7 @@ def load_system_prompt():
         return f"{soul}\n\n{rules}"
     except Exception as e:
         print(f"Error loading system prompt: {e}")
-        return "You are JARVIS, a helpful AI assistant."
+        return "You are DONNA, a helpful AI assistant."
 
 SYSTEM_PROMPT = load_system_prompt()
 
@@ -41,7 +41,7 @@ app.add_middleware(
 )
 
 # --- Session Manager ---
-class JarvisSession:
+class DonnaSession:
     def __init__(self, websocket: WebSocket):
         self.client_ws = websocket
         # Initialize the engine via Factory
@@ -94,9 +94,9 @@ class JarvisSession:
 
 @app.get("/")
 async def root():
-    return {"message": "JARVIS Brain is Online (Google Live API)"}
+    return {"message": "DONNA Brain is Online (Google Live API)"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    session = JarvisSession(websocket)
+    session = DonnaSession(websocket)
     await session.run()

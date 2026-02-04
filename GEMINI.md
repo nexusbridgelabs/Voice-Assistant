@@ -1,7 +1,7 @@
-# Project: JARVIS Voice Assistant
+# Project: DONNA Voice Assistant
 
 ## Overview
-JARVIS is a sophisticated, React-based voice assistant with a focus on high-fidelity visual feedback and natural, interruptible conversation. It features a 3D interface, long-term memory via Mem0, and an extensible tool system.
+DONNA is a sophisticated, React-based voice assistant with a focus on high-fidelity visual feedback and natural, interruptible conversation. It features a 3D interface, long-term memory via Mem0, and an extensible tool system.
 
 ## Key Files
 *   `PRD.md`: The Product Requirements Document outlining features and scope.

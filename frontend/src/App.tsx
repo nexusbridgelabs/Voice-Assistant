@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Mic, Power } from 'lucide-react';
-import { JarvisSphere } from './components/JarvisSphere';
+import { DonnaSphere } from './components/DonnaSphere';
 import { ChatPanel } from './components/ChatPanel';
 import { AudioDebugPanel } from './components/AudioDebugPanel';
 import { DeviceSelector } from './components/DeviceSelector';
@@ -198,7 +198,7 @@ function App() {
       {/* Header / Status */}
       <div className="absolute top-8 left-8 z-10">
         <h1 className="text-4xl font-bold tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-r from-jarvis-blue to-white drop-shadow-[0_0_10px_rgba(0,240,255,0.8)]">
-          JARVIS
+          DONNA
         </h1>
         <div className="flex items-center gap-3 mt-2 pl-1 border-l-2 border-jarvis-blue/50">
           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400 shadow-[0_0_10px_rgba(74,222,128,1)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,1)]'} transition-all duration-500`} />
@@ -226,7 +226,7 @@ function App() {
           <ambientLight intensity={0.2} />
           <pointLight position={[10, 10, 10]} intensity={1.5} color="#00f0ff" />
           <pointLight position={[-10, -5, -10]} intensity={1} color="#ff00aa" />
-          <JarvisSphere state={appState} audioLevel={audioLevel} />
+          <DonnaSphere state={appState} audioLevel={audioLevel} />
           <OrbitControls enableZoom={false} enablePan={false} maxPolarAngle={Math.PI / 1.5} minPolarAngle={Math.PI / 2.5} />
         </Canvas>
       </div>
