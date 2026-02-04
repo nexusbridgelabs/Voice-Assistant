@@ -184,7 +184,7 @@ class DeepgramPipelineEngine(ConversationEngine):
             chunks_sent = 0
             total_bytes = 0
             audio_buffer = bytearray()
-            MIN_CHUNK_SIZE = 32768 # 32KB buffer (~0.6s at 24kHz 16-bit) to ensure smooth playback
+            MIN_CHUNK_SIZE = 4096 # 4KB buffer (~0.1s) for low latency
             
             async for audio_chunk in audio_generator:
                 if audio_chunk:
@@ -213,11 +213,10 @@ class DeepgramPipelineEngine(ConversationEngine):
             print(f"[Pipeline] Sent {chunks_sent} chunks ({total_bytes} bytes) for sentence")
             self.turn_total_bytes += total_bytes
 
-            # Wait for this sentence to finish playing before sending next
-            # 24kHz 16-bit mono = 48000 bytes/sec
+            # Reintroduce a 'soft wait' (half duration) to prevent overlapping 
+            # while keeping latency low. Frontend handles exact scheduling.
             sentence_duration = total_bytes / 48000.0
-            print(f"[Pipeline] Waiting {sentence_duration:.2f}s for sentence playback")
-            await asyncio.sleep(sentence_duration)
+            await asyncio.sleep(sentence_duration * 0.5)
             
         except Exception as e:
             print(f"[TTS Error] {e}")

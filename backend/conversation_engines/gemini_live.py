@@ -7,7 +7,7 @@ import traceback
 from .base import ConversationEngine
 
 class GeminiLiveEngine(ConversationEngine):
-    MIN_AUDIO_BUFFER_SIZE = 32768  # 32KB buffer for smooth playback
+    MIN_AUDIO_BUFFER_SIZE = 4096  # 4KB buffer for lower latency (~0.15s)
     DEBUG_SAVE_AUDIO = True  # Save first 5 seconds of audio for debugging
 
     def __init__(self, system_prompt: str, google_api_key: str):

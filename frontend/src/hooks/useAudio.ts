@@ -263,7 +263,7 @@ export const useAudio = () => {
         // Schedule playback
         const currentTime = ctx.currentTime;
         if (nextPlayTimeRef.current < currentTime) {
-            nextPlayTimeRef.current = currentTime + 0.05;
+            nextPlayTimeRef.current = currentTime + 0.01;
         }
 
         source.start(nextPlayTimeRef.current);
