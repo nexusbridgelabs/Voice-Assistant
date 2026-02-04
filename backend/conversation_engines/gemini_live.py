@@ -21,6 +21,7 @@ class GeminiLiveEngine(ConversationEngine):
         self.input_audio_buffer = bytearray()
         self.debug_audio_buffer = bytearray()
         self.debug_audio_saved = False
+        self.interruption_hits = 0
 
     async def start_session(self, output_handler):
         self.output_handler = output_handler
@@ -94,14 +95,18 @@ class GeminiLiveEngine(ConversationEngine):
             # print(f"[Gemini Input] {len(audio_to_send)} bytes, {num_samples} samples, RMS: {rms:.0f}")
 
             # MANUAL BARGE-IN: If volume is high enough while responding, interrupt
-            if self.is_responding and rms > 800: # Threshold matching debug panel
-                print(f"[Barge-In] Local VAD detected speech (RMS: {rms:.0f}) -> Interrupting")
-                self.is_responding = False
-                self.audio_buffer = bytearray()
-                # Send stop to frontend
-                asyncio.create_task(self.output_handler(json.dumps({"type": "stop_audio"})))
-                # We don't need to send anything special to Google; 
-                # just sending new audio chunks usually triggers their VAD too.
+            # Require 3 consecutive hits (approx 60ms of audio) above threshold to filter noise
+            if self.is_responding and rms > 1000: 
+                self.interruption_hits += 1
+                if self.interruption_hits >= 3:
+                    print(f"[Barge-In] Local VAD verified speech (RMS: {rms:.0f}) -> Interrupting")
+                    self.is_responding = False
+                    self.interruption_hits = 0
+                    self.audio_buffer = bytearray()
+                    # Send stop to frontend
+                    asyncio.create_task(self.output_handler(json.dumps({"type": "stop_audio"})))
+            else:
+                self.interruption_hits = 0
 
         b64_audio = base64.b64encode(audio_to_send).decode("utf-8")
         

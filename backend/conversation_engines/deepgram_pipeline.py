@@ -116,18 +116,19 @@ class DeepgramPipelineEngine(ConversationEngine):
                 elif event["type"] == "signal":
                     if event["value"] == "speech_started":
                         print("\n[VAD] User started speaking")
-                        # BARGE-IN: If agent is speaking, stop it immediately
-                        if self.turn_task and not self.turn_task.done():
-                            print("[Barge-In] Speech started -> Stopping playback")
-                            if self.output_handler:
-                                await self.output_handler(json.dumps({"type": "stop_audio"}))
-
+                        # We no longer interrupt on 'speech_started' to avoid jitter from noise
                         # Cancel silence timer
                         if self.silence_timer_task:
                             self.silence_timer_task.cancel()
                     
                     elif event["value"] == "utterance_end":
                         print("\n[VAD] Deepgram UtteranceEnd -> Processing Turn")
+                        # BARGE-IN: Interrupt if agent is active
+                        if self.turn_task and not self.turn_task.done():
+                            print("[Barge-In] Utterance verified -> Stopping playback")
+                            if self.output_handler:
+                                await self.output_handler(json.dumps({"type": "stop_audio"}))
+                        
                         # Cancel silence timer (we are handling it now)
                         if self.silence_timer_task:
                             self.silence_timer_task.cancel()
