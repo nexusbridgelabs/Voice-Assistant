@@ -127,8 +127,8 @@ export const useAudio = () => {
           sum += v * v;
         }
         const rms = Math.sqrt(sum / dataArray.length);
-        // Significantly increased multiplier for mic (18 -> 30)
-        const level = rms > 0.01 ? rms * 30 : 0; 
+        // Significantly increased multiplier for mic (60 -> 90) for highly dramatic user response
+        const level = rms > 0.01 ? rms * 90 : 0; 
         currentMax = Math.max(currentMax, level);
       }
 
@@ -143,12 +143,15 @@ export const useAudio = () => {
           sum += v * v;
         }
         const rms = Math.sqrt(sum / dataArray.length);
-        const level = rms > 0.005 ? rms * 8 : 0; 
+        // Increased playback multiplier from 8 to 12
+        const level = rms > 0.005 ? rms * 12 : 0; 
         currentMax = Math.max(currentMax, level);
       }
 
-      // Extremely slow smoothing (0.04) for a heavy, liquid feel that reduces eye strain
-      const smoothedLevel = lastLevelRef.current * 0.96 + Math.min(currentMax, 1.0) * 0.04;
+      // Extremely heavy smoothing (0.025) for a "high-viscosity" liquid feel.
+      // This preserves the peak amplitude but forces the sphere to transition 
+      // there much more slowly and smoothly, eliminating eye strain.
+      const smoothedLevel = lastLevelRef.current * 0.975 + Math.min(currentMax, 1.0) * 0.025;
       lastLevelRef.current = smoothedLevel;
 
       setAudioLevel(smoothedLevel);

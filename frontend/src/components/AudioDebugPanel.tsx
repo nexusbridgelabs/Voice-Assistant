@@ -107,8 +107,8 @@ export const AudioDebugPanel = ({ pcmRms, analyser }: AudioDebugPanelProps) => {
   }
 
   // Threshold markers (Matching backend constants for visual reference)
-  const startThreshold = 800;
-  const stopThreshold = 400;
+  const startThreshold = 500;
+  const stopThreshold = 300;
   const maxScale = 5000; // Visual scale for RMS
 
   const percentage = Math.min((pcmRms / maxScale) * 100, 100);

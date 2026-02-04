@@ -23,31 +23,33 @@ export const JarvisSphere = ({ state, audioLevel }: JarvisSphereProps) => {
     // Dynamic scaling based on audio level or state - Increased by ~30%
     let targetScale = 1 + audioLevel * 0.8; // Max scale ~1.8
     if (state === 'processing') {
-      targetScale = 1.05 + Math.sin(time * 3) * 0.05; // Even slower, deeper pulse
+      targetScale = 1.2 + Math.sin(time * 2) * 0.25; // Slower frequency (3 -> 2) for deep breathing
     }
-    meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
+    // Faster lerp (0.15) for the scale ensures the "Spikes" are seen, 
+    // while the slow audioLevel calculation in useAudio handles the smoothness.
+    meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.15);
   });
 
   // Determine color and distortion based on state
   let color = "#00f0ff"; // Default Blue
   let distort = 0.4;
-  let speed = 0.3; // Very slow base speed for eye comfort
+  let speed = 0.2; // Even slower base speed for ultra-smooth liquid feel
 
   switch (state) {
     case 'listening':
       color = "#00ff88"; // Green
       distort = 0.3 + audioLevel * 0.7; 
-      speed = 0.2 + audioLevel * 0.5; 
+      speed = 0.1 + audioLevel * 0.4; // Very low speed multipliers
       break;
     case 'processing':
       color = "#aa00ff"; // Purple
       distort = 0.4;
-      speed = 0.5; 
+      speed = 0.3; 
       break;
     case 'speaking':
       color = "#00f0ff"; // Blue
       distort = 0.3 + audioLevel * 0.8; 
-      speed = 0.2 + audioLevel * 0.6;
+      speed = 0.1 + audioLevel * 0.5;
       break;
     case 'idle':
     default:
