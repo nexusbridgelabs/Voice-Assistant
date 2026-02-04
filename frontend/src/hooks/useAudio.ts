@@ -228,6 +228,20 @@ export const useAudio = () => {
       console.log('[Audio] Reset for new turn');
   }, []);
 
+  const stopAudioPlayback = useCallback(() => {
+      const ctx = playbackContextRef.current;
+      if (ctx) {
+          // We can't easily "cancel" already scheduled AudioBufferSourceNodes 
+          // without keeping track of them all, but we can suspend/resume the context
+          // or just close and recreate it for a "hard stop".
+          // Re-creating the context is the most reliable way to kill all pending audio.
+          playbackContextRef.current.close().catch(() => {});
+          playbackContextRef.current = null;
+          nextPlayTimeRef.current = 0;
+          console.log('[Audio] Playback stopped and context cleared');
+      }
+  }, []);
+
   // No-op for compatibility
   const playAccumulatedAudio = useCallback(() => {}, []);
 
@@ -287,5 +301,5 @@ export const useAudio = () => {
     return Math.max(0, remaining);
   }, []);
 
-  return { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio, getPlaybackRemainingTime };
+  return { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio, getPlaybackRemainingTime, stopAudioPlayback };
 };

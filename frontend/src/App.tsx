@@ -15,7 +15,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>();
   
-  const { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio, getPlaybackRemainingTime } = useAudio();
+  const { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio, getPlaybackRemainingTime, stopAudioPlayback } = useAudio();
   const { isConnected, sendMessage, lastMessage } = useWebSocket('ws://localhost:8000/ws');
   
   // Ref to access current state/level in callbacks without dependency issues (Stale Closure Fix)
@@ -81,6 +81,10 @@ function App() {
             else if (data.type === 'audio') {
                 playAudioChunk(data.data);
                 Promise.resolve().then(() => setAppState('speaking'));
+            }
+            else if (data.type === 'stop_audio') {
+                stopAudioPlayback();
+                Promise.resolve().then(() => setAppState('listening'));
             }
             else if (data.type === 'turn_complete') {
                 const remainingTime = getPlaybackRemainingTime();

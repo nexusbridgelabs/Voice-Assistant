@@ -40,9 +40,7 @@ class DeepgramPipelineEngine(ConversationEngine):
         print("Deepgram Pipeline Started")
 
     async def process_audio_input(self, audio_data: bytes):
-        if self.turn_task and not self.turn_task.done():
-            # Drop audio to prevent echo/interruption
-            return
+        # Allow audio input even during agent turn to support Barge-In
         await self.stt.send_audio(audio_data)
 
     async def process_text_input(self, text: str):
@@ -70,10 +68,13 @@ class DeepgramPipelineEngine(ConversationEngine):
         self.current_transcript = []
         if full_text:
             if self.turn_task and not self.turn_task.done():
-                print(f"\n[VAD] Ignoring input '{full_text}' (Agent is active)")
-            else:
-                print(f"[Pipeline] Starting turn with text: '{full_text}'")
-                self.turn_task = asyncio.create_task(self.handle_turn(full_text))
+                print(f"\n[Barge-In] Interrupting current turn for: '{full_text}'")
+                self.turn_task.cancel()
+                if self.output_handler:
+                    await self.output_handler(json.dumps({"type": "stop_audio"}))
+            
+            print(f"[Pipeline] Starting turn with text: '{full_text}'")
+            self.turn_task = asyncio.create_task(self.handle_turn(full_text))
         else:
             # Only log if we expected something, to avoid noise
             pass
@@ -81,15 +82,16 @@ class DeepgramPipelineEngine(ConversationEngine):
     async def orchestrate(self):
         try:
             async for event in self.stt.listen():
-                # ECHO CANCELLATION: Ignore all input if Agent is active
-                if self.turn_task and not self.turn_task.done():
-                    if event["type"] == "text" and event.get("is_final"):
-                         print(f"\n[Echo Block] Ignored text: '{event['value']}'")
-                    continue
+                # BARGE-IN DETECTION: Check if agent is active when user speaks
+                is_agent_active = self.turn_task and not self.turn_task.done()
 
                 if event["type"] == "text":
                     text = event["value"]
                     is_final = event.get("is_final", False)
+                    
+                    if is_agent_active:
+                         # We don't ignore it anymore, we'll use it to interrupt
+                         print(f"\n[Barge-In] User spoke during agent turn: '{text}'")
                     
                     current_turn_text = " ".join(self.current_transcript + [text])
 

@@ -72,9 +72,8 @@ class GeminiLiveEngine(ConversationEngine):
         if not self.running or not self.google_ws:
             return
 
-        # IGNORE INPUT IF MODEL IS RESPONDING (Disable Barge-In)
-        if self.is_responding:
-            return
+        # ALLOW INPUT EVEN IF MODEL IS RESPONDING (Enable Barge-In)
+        # Gemini handles interruption natively if setup with automaticActivityDetection
 
         # Buffer audio to send larger chunks (Gemini may need bigger chunks)
         self.input_audio_buffer.extend(audio_data)
@@ -135,6 +134,13 @@ class GeminiLiveEngine(ConversationEngine):
                 # Extract Audio
                 server_content = response.get("serverContent")
                 if server_content:
+                    # Detect Interruption (Google native)
+                    if server_content.get("interrupted"):
+                        print("DEBUG: Google sent Interrupted signal")
+                        self.is_responding = False
+                        self.audio_buffer = bytearray()
+                        await self.output_handler(json.dumps({"type": "stop_audio"}))
+
                     model_turn = server_content.get("modelTurn")
                     if model_turn:
                         if not self.is_responding:
