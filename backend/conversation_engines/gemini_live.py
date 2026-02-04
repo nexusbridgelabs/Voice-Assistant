@@ -125,7 +125,7 @@ class GeminiLiveEngine(ConversationEngine):
                 print(f"[Gemini Response] {json.dumps(response)[:500]}")
 
                 if response.get("setupComplete"):
-                    print(f"DEBUG: Setup Complete")
+                    print("DEBUG: Setup Complete")
                 
                 # Handle Transcriptions
                 transcription = response.get("audioTranscription")

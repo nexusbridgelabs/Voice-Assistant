@@ -54,9 +54,9 @@ export const useAudio = () => {
         const targetSampleRate = 16000;
 
         // Log sample rate mismatch (only once)
-        if (!processorRef.current?.hasLoggedRate) {
+        if (!(processorRef.current as AudioNode & { hasLoggedRate?: boolean }).hasLoggedRate) {
           console.log(`[Audio] Input: ${inputSampleRate}Hz, Target: ${targetSampleRate}Hz, Ratio: ${inputSampleRate/targetSampleRate}`);
-          (processorRef.current as any).hasLoggedRate = true;
+          (processorRef.current as AudioNode & { hasLoggedRate?: boolean }).hasLoggedRate = true;
         }
 
         let finalData = inputData;
@@ -244,11 +244,9 @@ export const useAudio = () => {
         const int16Data = new Int16Array(bytes.buffer);
         const float32Data = new Float32Array(int16Data.length);
         
-        let sum = 0;
         for (let i = 0; i < int16Data.length; i++) {
             const sample = int16Data[i] / 32768.0;
             float32Data[i] = sample;
-            sum += sample * sample;
         }
         // Create buffer at TTS sample rate
         const buffer = ctx.createBuffer(1, float32Data.length, TTS_SAMPLE_RATE);
