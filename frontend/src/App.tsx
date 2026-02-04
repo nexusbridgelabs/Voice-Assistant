@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { Mic, Power } from 'lucide-react';
+import { Power } from 'lucide-react';
 import { DonnaSphere } from './components/DonnaSphere';
 import { ChatPanel } from './components/ChatPanel';
 import { AudioDebugPanel } from './components/AudioDebugPanel';
@@ -242,7 +242,7 @@ function App() {
       </div>
 
       {/* Controls */}
-      <div className="absolute bottom-20 flex gap-8 z-20 items-center">
+      <div className="absolute bottom-20 z-20 flex items-center">
         
         {/* Main Power/Toggle */}
         <button 
@@ -258,17 +258,6 @@ function App() {
             isListening ? 'text-red-400 scale-110 drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'text-jarvis-blue group-hover:scale-110 drop-shadow-[0_0_5px_rgba(0,240,255,0.8)]'
           }`} />
         </button>
-
-        {/* PTT (Only visible when paused) */}
-        {!isListening && (
-            <button 
-              className="p-6 rounded-full border border-green-500/30 bg-green-500/5 backdrop-blur-md hover:bg-green-500/10 active:scale-95 transition-all shadow-[0_0_20px_rgba(74,222,128,0.1)] group"
-              onMouseDown={() => { startListening(handleAudioData); setAppState('listening'); }}
-              onMouseUp={() => { stopListening(); setAppState('idle'); }}
-            >
-              <Mic size={24} className="text-green-400 group-hover:drop-shadow-[0_0_8px_rgba(74,222,128,0.8)] transition-all" />
-            </button>
-        )}
         
       </div>
 

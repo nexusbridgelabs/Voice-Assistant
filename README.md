@@ -14,7 +14,6 @@ DONNA is a sophisticated, highly interactive voice assistant featuring a futuris
     *   **Device Selector:** Choose your preferred microphone input.
     *   **Chat Panel:** View the text transcript of the conversation in real-time.
     *   **Debug Panel:** Monitor audio levels and system status.
-    *   **Push-to-Talk:** Optional mode for discrete interaction.
 
 ## 🛠️ Tech Stack
 
