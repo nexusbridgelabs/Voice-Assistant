@@ -127,8 +127,8 @@ export const useAudio = () => {
           sum += v * v;
         }
         const rms = Math.sqrt(sum / dataArray.length);
-        // Significantly increased multiplier for mic (60 -> 90) for highly dramatic user response
-        const level = rms > 0.01 ? rms * 90 : 0; 
+        // Significantly increased multiplier for mic (120 -> 180) for highly dramatic user response
+        const level = rms > 0.01 ? rms * 180 : 0; 
         currentMax = Math.max(currentMax, level);
       }
 
@@ -143,8 +143,8 @@ export const useAudio = () => {
           sum += v * v;
         }
         const rms = Math.sqrt(sum / dataArray.length);
-        // Increased playback multiplier from 8 to 12
-        const level = rms > 0.005 ? rms * 12 : 0; 
+        // Increased playback multiplier to 15
+        const level = rms > 0.005 ? rms * 15 : 0; 
         currentMax = Math.max(currentMax, level);
       }
 

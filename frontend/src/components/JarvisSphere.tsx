@@ -23,7 +23,7 @@ export const JarvisSphere = ({ state, audioLevel }: JarvisSphereProps) => {
     // Dynamic scaling based on audio level or state - Increased by ~30%
     let targetScale = 1 + audioLevel * 0.8; // Max scale ~1.8
     if (state === 'processing') {
-      targetScale = 1.2 + Math.sin(time * 2) * 0.25; // Slower frequency (3 -> 2) for deep breathing
+      targetScale = 1.5 + Math.sin(time * 2) * 0.35; // Increased base and amplitude by ~30%
     }
     // Faster lerp (0.15) for the scale ensures the "Spikes" are seen, 
     // while the slow audioLevel calculation in useAudio handles the smoothness.
