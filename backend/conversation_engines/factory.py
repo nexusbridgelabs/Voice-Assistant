@@ -17,7 +17,7 @@ class EngineFactory:
                 tts_config = {
                     "provider": "kokoro",
                     "base_url": os.getenv("KOKORO_BASE_URL", "https://kokoro.jmwalker.dev"),
-                    "voice": os.getenv("KOKORO_VOICE", "af_bella")
+                    "voice": os.getenv("KOKORO_VOICE", "bf_emma")
                 }
                 required_keys = [deepgram_key, google_key]
             else:

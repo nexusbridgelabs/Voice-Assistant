@@ -4,7 +4,7 @@ from .base import TTSProvider
 
 
 class KokoroTTSProvider(TTSProvider):
-    def __init__(self, base_url: str = "https://kokoro.jmwalker.dev", voice: str = "af_bella"):
+    def __init__(self, base_url: str = "https://kokoro.jmwalker.dev", voice: str = "bf_emma"):
         self.base_url = base_url.rstrip("/")
         self.voice = voice
         self.client = httpx.AsyncClient(timeout=30.0)

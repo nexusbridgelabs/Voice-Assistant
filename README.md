@@ -8,7 +8,7 @@ DONNA is a sophisticated, highly interactive voice assistant featuring a futuris
 *   **Real-time Voice Interaction:** Low-latency voice processing with websocket-based full-duplex communication.
 *   **Flexible Conversation Engines:** Switch between different backend architectures:
     *   **Gemini Live:** Uses Google's Multimodal Live API for an all-in-one low-latency experience.
-    *   **Deepgram Pipeline:** A modular pipeline using Deepgram (STT), Gemini (LLM), and ElevenLabs (TTS).
+    *   **Deepgram Pipeline:** A modular pipeline using Deepgram (STT), Gemini (LLM), and ElevenLabs or Kokoro (TTS).
 *   **Smart "Barge-in":** The user can interrupt the agent while it is speaking.
 *   **Rich UI Controls:**
     *   **Device Selector:** Choose your preferred microphone input.
@@ -24,6 +24,7 @@ DONNA is a sophisticated, highly interactive voice assistant featuring a futuris
     *   Google Gemini (LLM & Audio)
     *   Deepgram (STT)
     *   ElevenLabs (TTS - optional)
+    *   Kokoro TTS (Self-hosted/Custom API - optional)
 
 ## 📋 Prerequisites
 
@@ -32,7 +33,8 @@ DONNA is a sophisticated, highly interactive voice assistant featuring a futuris
 *   **API Keys** (depending on the engine you choose):
     *   [Google Gemini API Key](https://aistudio.google.com/)
     *   [Deepgram API Key](https://console.deepgram.com/) (for Deepgram Pipeline)
-    *   [ElevenLabs API Key](https://elevenlabs.io/) (for Deepgram Pipeline)
+    *   [ElevenLabs API Key](https://elevenlabs.io/) (for Deepgram Pipeline - optional)
+    *   **Kokoro TTS Endpoint:** A running Kokoro TTS API (optional)
 
 ## ⚡ Quick Start Guide
 
@@ -57,11 +59,20 @@ CONVERSATION_ENGINE=gemini_live
 GOOGLE_API_KEY=your_google_key
 ```
 
-**Option B: Deepgram Pipeline (For modular control)**
+**Option B: Deepgram Pipeline (Modular control)**
 ```env
 CONVERSATION_ENGINE=deepgram_pipeline
 GOOGLE_API_KEY=your_google_key
 DEEPGRAM_API_KEY=your_deepgram_key
+
+# Choose TTS Provider: 'elevenlabs' or 'kokoro'
+TTS_PROVIDER=kokoro 
+
+# If using Kokoro (Recommended for DONNA)
+KOKORO_BASE_URL=https://kokoro.jmwalker.dev
+KOKORO_VOICE=bf_emma  # Recommended voice for DONNA
+
+# If using ElevenLabs
 ELEVENLABS_API_KEY=your_elevenlabs_key
 ```
 
