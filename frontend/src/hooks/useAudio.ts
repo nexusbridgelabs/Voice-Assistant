@@ -9,6 +9,7 @@ export const useAudio = () => {
   const playbackContextRef = useRef<AudioContext | null>(null);  // For TTS playback (native rate)
   const streamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const playbackAnalyserRef = useRef<AnalyserNode | null>(null);
   const processorRef = useRef<AudioNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nextStartTimeRef = useRef<number>(0);
@@ -78,20 +79,11 @@ export const useAudio = () => {
             }
         }
         
-        // Calculate volume for visualization
-        let sum = 0;
-        for (let i = 0; i < finalData.length; i++) {
-             sum += finalData[i] * finalData[i];
-        }
-        const rms = Math.sqrt(sum / finalData.length);
-        setAudioLevel(Math.min(rms * 10, 1)); 
-
-        // Gain
-        const gain = 2.0;
+        // Calculate volume for visualization (Calculated in animation loop now)
         const pcmData = new Int16Array(finalData.length);
         let pcmSumSq = 0;
         for (let i = 0; i < finalData.length; i++) {
-             let s = finalData[i] * gain;
+             let s = finalData[i] * 2.0; // Gain 2.0
              s = Math.max(-1, Math.min(1, s));
              pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
              pcmSumSq += pcmData[i] * pcmData[i];
@@ -114,6 +106,57 @@ export const useAudio = () => {
     } catch (err) {
       console.error("Error accessing microphone:", err);
     }
+  }, []);
+
+  // Continuous animation loop for audio levels
+  const lastLevelRef = useRef(0);
+  useEffect(() => {
+    let animationFrame: number;
+    
+    const updateLevels = () => {
+      let currentMax = 0;
+
+      // Check Mic
+      if (analyserRef.current) {
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteTimeDomainData(dataArray);
+        
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = (dataArray[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        // Significantly increased multiplier for mic (18 -> 30)
+        const level = rms > 0.01 ? rms * 30 : 0; 
+        currentMax = Math.max(currentMax, level);
+      }
+
+      // Check Playback
+      if (playbackAnalyserRef.current) {
+        const dataArray = new Uint8Array(playbackAnalyserRef.current.frequencyBinCount);
+        playbackAnalyserRef.current.getByteTimeDomainData(dataArray);
+        
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = (dataArray[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        const level = rms > 0.005 ? rms * 8 : 0; 
+        currentMax = Math.max(currentMax, level);
+      }
+
+      // Extremely slow smoothing (0.04) for a heavy, liquid feel that reduces eye strain
+      const smoothedLevel = lastLevelRef.current * 0.96 + Math.min(currentMax, 1.0) * 0.04;
+      lastLevelRef.current = smoothedLevel;
+
+      setAudioLevel(smoothedLevel);
+      animationFrame = requestAnimationFrame(updateLevels);
+    };
+
+    updateLevels();
+    return () => cancelAnimationFrame(animationFrame);
   }, []);
 
   const stopListening = useCallback(() => {
@@ -162,6 +205,12 @@ export const useAudio = () => {
       if (!playbackContextRef.current) {
           playbackContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
           console.log(`[Audio] Playback context created at ${playbackContextRef.current.sampleRate}Hz`);
+          
+          const playbackAnalyser = playbackContextRef.current.createAnalyser();
+          playbackAnalyser.fftSize = 256;
+          playbackAnalyserRef.current = playbackAnalyser;
+          playbackAnalyser.connect(playbackContextRef.current.destination);
+          
           nextPlayTimeRef.current = playbackContextRef.current.currentTime;
       }
       return playbackContextRef.current;
@@ -191,17 +240,24 @@ export const useAudio = () => {
         }
         const int16Data = new Int16Array(bytes.buffer);
         const float32Data = new Float32Array(int16Data.length);
+        
+        let sum = 0;
         for (let i = 0; i < int16Data.length; i++) {
-            float32Data[i] = int16Data[i] / 32768.0;
+            const sample = int16Data[i] / 32768.0;
+            float32Data[i] = sample;
+            sum += sample * sample;
         }
-
         // Create buffer at TTS sample rate
         const buffer = ctx.createBuffer(1, float32Data.length, TTS_SAMPLE_RATE);
         buffer.copyToChannel(float32Data, 0);
 
         const source = ctx.createBufferSource();
         source.buffer = buffer;
-        source.connect(ctx.destination);
+        if (playbackAnalyserRef.current) {
+            source.connect(playbackAnalyserRef.current);
+        } else {
+            source.connect(ctx.destination);
+        }
 
         // Schedule playback
         const currentTime = ctx.currentTime;

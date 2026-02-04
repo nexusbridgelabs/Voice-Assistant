@@ -132,6 +132,10 @@ class DeepgramPipelineEngine(ConversationEngine):
 
     async def handle_turn(self, text: str):
         print(f"\n[LLM] Generating response for: '{text}'")
+        # Send processing state to frontend
+        if self.output_handler:
+            await self.output_handler(json.dumps({"type": "state", "state": "processing"}))
+        
         # Start keepalive loop to prevent Deepgram timeout during agent turn
         self.keepalive_task = asyncio.create_task(self._keepalive_loop())
         self.turn_total_bytes = 0  # Track total audio bytes for this turn

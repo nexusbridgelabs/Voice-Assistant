@@ -137,6 +137,11 @@ class GeminiLiveEngine(ConversationEngine):
                 if server_content:
                     model_turn = server_content.get("modelTurn")
                     if model_turn:
+                        if not self.is_responding:
+                            await self.output_handler(json.dumps({
+                                "type": "state",
+                                "state": "processing"
+                            }))
                         self.is_responding = True
 
                         parts = model_turn.get("parts", [])
