@@ -5,7 +5,8 @@ export const useAudio = () => {
   const [audioLevel, setAudioLevel] = useState(0);
   const [pcmRms, setPcmRms] = useState(0);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);  // For mic input (16kHz)
+  const playbackContextRef = useRef<AudioContext | null>(null);  // For TTS playback (native rate)
   const streamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const processorRef = useRef<AudioNode | null>(null);
@@ -16,15 +17,15 @@ export const useAudio = () => {
 
   const startListening = useCallback(async (onAudioData: (data: ArrayBuffer) => void, deviceId?: string) => {
     try {
-      const constraints = { 
-        audio: { 
+      const constraints = {
+        audio: {
             deviceId: deviceId ? { exact: deviceId } : undefined,
             channelCount: 1,
             sampleRate: 16000,
-            echoCancellation: false,
+            echoCancellation: true,  // Enable to prevent agent hearing itself
             noiseSuppression: false,
             autoGainControl: false
-        } 
+        }
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
@@ -50,7 +51,13 @@ export const useAudio = () => {
         const inputData = e.inputBuffer.getChannelData(0);
         const inputSampleRate = audioContext.sampleRate;
         const targetSampleRate = 16000;
-        
+
+        // Log sample rate mismatch (only once)
+        if (!processorRef.current?.hasLoggedRate) {
+          console.log(`[Audio] Input: ${inputSampleRate}Hz, Target: ${targetSampleRate}Hz, Ratio: ${inputSampleRate/targetSampleRate}`);
+          (processorRef.current as any).hasLoggedRate = true;
+        }
+
         let finalData = inputData;
 
         // Downsample (Box Filter)
@@ -140,29 +147,42 @@ export const useAudio = () => {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
+    // Note: Keep playbackContextRef alive for TTS playback
     setIsListening(false);
     setAudioLevel(0);
     setPcmRms(0);
   }, []);
 
+  // Kokoro TTS sample rate
+  const TTS_SAMPLE_RATE = 24000;
+  const nextPlayTimeRef = useRef<number>(0);
+
+  // Get or create playback context (separate from mic context)
+  const getPlaybackContext = useCallback(() => {
+      if (!playbackContextRef.current) {
+          playbackContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+          console.log(`[Audio] Playback context created at ${playbackContextRef.current.sampleRate}Hz`);
+          nextPlayTimeRef.current = playbackContextRef.current.currentTime;
+      }
+      return playbackContextRef.current;
+  }, []);
+
+  // Reset audio timing for new turn
+  const resetAudioPlayback = useCallback(() => {
+      const ctx = playbackContextRef.current;
+      if (ctx) {
+          nextPlayTimeRef.current = ctx.currentTime + 0.1;
+      }
+      console.log('[Audio] Reset for new turn');
+  }, []);
+
+  // No-op for compatibility
+  const playAccumulatedAudio = useCallback(() => {}, []);
+
   const playAudioChunk = useCallback((base64Data: string) => {
-      // Ensure we have an audio context for playback even if not listening
-      if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-          nextStartTimeRef.current = audioContextRef.current.currentTime;
-      }
-      
-      const ctx = audioContextRef.current;
-
-      // Initialize HTMLAudioElement output for AEC support
-      if (!outputDestRef.current) {
-          outputDestRef.current = ctx.createMediaStreamDestination();
-          audioOutputRef.current = new Audio();
-          audioOutputRef.current.srcObject = outputDestRef.current.stream;
-          audioOutputRef.current.play().catch(e => console.error("Audio playback error:", e));
-      }
-
       try {
+        const ctx = getPlaybackContext();
+
         const binaryString = window.atob(base64Data);
         const len = binaryString.length;
         const bytes = new Uint8Array(len);
@@ -171,34 +191,32 @@ export const useAudio = () => {
         }
         const int16Data = new Int16Array(bytes.buffer);
         const float32Data = new Float32Array(int16Data.length);
-        console.log(`Received Audio Chunk: ${float32Data.length} samples. Duration at 24k: ${(float32Data.length/24000).toFixed(3)}s, at 16k: ${(float32Data.length/16000).toFixed(3)}s`);
         for (let i = 0; i < int16Data.length; i++) {
             float32Data[i] = int16Data[i] / 32768.0;
         }
 
-        // Gemini Live Audio is typically 24kHz, but preview might be 16kHz?
-        // If it sounds high-pitched/fast, lower this. If low-pitched/slow, raise it.
-        const buffer = ctx.createBuffer(1, float32Data.length, 24000); 
+        // Create buffer at TTS sample rate
+        const buffer = ctx.createBuffer(1, float32Data.length, TTS_SAMPLE_RATE);
         buffer.copyToChannel(float32Data, 0);
 
         const source = ctx.createBufferSource();
         source.buffer = buffer;
-        source.connect(outputDestRef.current);
-        
+        source.connect(ctx.destination);
+
+        // Schedule playback
         const currentTime = ctx.currentTime;
-        // Jitter Buffer: If we drift behind (underrun), reset to now + safety margin
-        // Increased to 0.5s to fix "choppy" audio reports
-        if (nextStartTimeRef.current < currentTime) {
-            nextStartTimeRef.current = currentTime + 0.5; 
+        if (nextPlayTimeRef.current < currentTime) {
+            nextPlayTimeRef.current = currentTime + 0.05;
         }
-        
-        const startTime = nextStartTimeRef.current;
-        source.start(startTime);
-        nextStartTimeRef.current += buffer.duration;
+
+        source.start(nextPlayTimeRef.current);
+        nextPlayTimeRef.current += buffer.duration;
+
+        console.log(`[Audio] Playing ${int16Data.length} samples (${(int16Data.length/TTS_SAMPLE_RATE).toFixed(2)}s), ${len} bytes`);
       } catch (e) {
           console.error("Error playing audio chunk", e);
       }
-  }, []);
+  }, [getPlaybackContext]);
 
   useEffect(() => {
     return () => {
@@ -206,5 +224,5 @@ export const useAudio = () => {
     };
   }, [stopListening]);
 
-  return { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk };
+  return { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio };
 };

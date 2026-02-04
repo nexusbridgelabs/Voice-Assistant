@@ -6,12 +6,23 @@ from conversation_engines.base import ConversationEngine
 from audio_providers.stt.deepgram import DeepgramSTTProvider
 from audio_providers.llm.gemini_llm import GeminiLLMProvider
 from audio_providers.tts.elevenlabs_tts import ElevenLabsTTSProvider
+from audio_providers.tts.kokoro_tts import KokoroTTSProvider
 
 class DeepgramPipelineEngine(ConversationEngine):
-    def __init__(self, system_prompt: str, deepgram_key: str, google_key: str, elevenlabs_key: str):
+    def __init__(self, system_prompt: str, deepgram_key: str, google_key: str, tts_config: dict):
         self.stt = DeepgramSTTProvider(deepgram_key)
         self.llm = GeminiLLMProvider(google_key, system_prompt)
-        self.tts = ElevenLabsTTSProvider(elevenlabs_key)
+
+        # Initialize TTS provider based on config
+        if tts_config.get("provider") == "kokoro":
+            self.tts = KokoroTTSProvider(
+                base_url=tts_config.get("base_url", "https://kokoro.jmwalker.dev"),
+                voice=tts_config.get("voice", "af_bella")
+            )
+            print(f"Using Kokoro TTS: {tts_config.get('base_url')}")
+        else:
+            self.tts = ElevenLabsTTSProvider(tts_config.get("api_key"))
+            print("Using ElevenLabs TTS")
         
         self.output_handler = None
         self.running = False
@@ -19,6 +30,7 @@ class DeepgramPipelineEngine(ConversationEngine):
         self.orchestrator_task = None
         self.turn_task = None
         self.silence_timer_task = None
+        self.keepalive_task = None
 
     async def start_session(self, output_handler):
         self.output_handler = output_handler
@@ -41,6 +53,15 @@ class DeepgramPipelineEngine(ConversationEngine):
             await asyncio.sleep(duration)
             print("\n[Pipeline] Silence timeout -> Forcing Turn")
             await self.process_turn_logic()
+        except asyncio.CancelledError:
+            pass
+
+    async def _keepalive_loop(self):
+        """Send keepalive messages to Deepgram every 5 seconds during agent turn."""
+        try:
+            while True:
+                await asyncio.sleep(5)
+                await self.stt.send_keepalive()
         except asyncio.CancelledError:
             pass
 
@@ -111,9 +132,12 @@ class DeepgramPipelineEngine(ConversationEngine):
 
     async def handle_turn(self, text: str):
         print(f"\n[LLM] Generating response for: '{text}'")
+        # Start keepalive loop to prevent Deepgram timeout during agent turn
+        self.keepalive_task = asyncio.create_task(self._keepalive_loop())
+        self.turn_total_bytes = 0  # Track total audio bytes for this turn
         try:
             response_stream = self.llm.generate_response(text)
-            
+
             buffer = ""
             async for chunk in response_stream:
                 buffer += chunk
@@ -123,9 +147,13 @@ class DeepgramPipelineEngine(ConversationEngine):
                         if sentence.strip():
                              await self.speak_sentence(sentence)
                     buffer = sentences[-1]
-            
+
             if buffer.strip():
                 await self.speak_sentence(buffer)
+
+            # Small echo buffer at end of turn
+            print(f"\n[Pipeline] Total turn audio: {self.turn_total_bytes} bytes")
+            await asyncio.sleep(0.5)
 
             print("\n[Turn Complete]")
             await self.output_handler(json.dumps({"type": "turn_complete"}))
@@ -134,6 +162,11 @@ class DeepgramPipelineEngine(ConversationEngine):
             print("\n[Turn Cancelled]")
         except Exception as e:
             print(f"\n[Turn Error] {e}")
+        finally:
+            # Stop keepalive loop when turn ends
+            if self.keepalive_task:
+                self.keepalive_task.cancel()
+                self.keepalive_task = None
 
     async def speak_sentence(self, sentence: str):
         print(f"\n[TTS] Synthesizing: '{sentence}'")
@@ -173,15 +206,14 @@ class DeepgramPipelineEngine(ConversationEngine):
                 chunks_sent += 1
                 total_bytes += len(audio_buffer)
                 
-            print(f"[Pipeline] Sent {chunks_sent} accumulated audio chunks to client")
+            print(f"[Pipeline] Sent {chunks_sent} chunks ({total_bytes} bytes) for sentence")
+            self.turn_total_bytes += total_bytes
 
-            # Estimated Playback Duration (24kHz, 16-bit mono = 48000 bytes/sec)
-            playback_duration = total_bytes / 48000.0
-            safety_buffer = 2.0  # Add 2s for network latency/frontend buffering
-            total_sleep = playback_duration + safety_buffer
-            
-            print(f"[Pipeline] Estimated playback: {playback_duration:.2f}s + {safety_buffer}s buffer. Holding turn.")
-            await asyncio.sleep(total_sleep)
+            # Wait for this sentence to finish playing before sending next
+            # 24kHz 16-bit mono = 48000 bytes/sec
+            sentence_duration = total_bytes / 48000.0
+            print(f"[Pipeline] Waiting {sentence_duration:.2f}s for sentence playback")
+            await asyncio.sleep(sentence_duration)
             
         except Exception as e:
             print(f"[TTS Error] {e}")
@@ -194,6 +226,8 @@ class DeepgramPipelineEngine(ConversationEngine):
             self.turn_task.cancel()
         if self.silence_timer_task:
             self.silence_timer_task.cancel()
+        if self.keepalive_task:
+            self.keepalive_task.cancel()
         await self.stt.close()
         print("Pipeline Session Ended")
 

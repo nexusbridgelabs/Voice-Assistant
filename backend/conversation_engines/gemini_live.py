@@ -7,6 +7,9 @@ import traceback
 from .base import ConversationEngine
 
 class GeminiLiveEngine(ConversationEngine):
+    MIN_AUDIO_BUFFER_SIZE = 32768  # 32KB buffer for smooth playback
+    DEBUG_SAVE_AUDIO = True  # Save first 5 seconds of audio for debugging
+
     def __init__(self, system_prompt: str, google_api_key: str):
         self.system_prompt = system_prompt
         self.google_api_key = google_api_key
@@ -14,6 +17,10 @@ class GeminiLiveEngine(ConversationEngine):
         self.running = False
         self.is_responding = False
         self.output_handler = None
+        self.audio_buffer = bytearray()
+        self.input_audio_buffer = bytearray()
+        self.debug_audio_buffer = bytearray()
+        self.debug_audio_saved = False
 
     async def start_session(self, output_handler):
         self.output_handler = output_handler
@@ -55,7 +62,7 @@ class GeminiLiveEngine(ConversationEngine):
                 },
                 "inputAudioTranscription": {}, 
                 "systemInstruction": {
-                    "parts": [{"text": "Please converse in English. " + self.system_prompt}]
+                    "parts": [{"text": "You are JARVIS. Always respond in English only. The user speaks English."}]
                 }
             }
         }
@@ -69,7 +76,25 @@ class GeminiLiveEngine(ConversationEngine):
         if self.is_responding:
             return
 
-        b64_audio = base64.b64encode(audio_data).decode("utf-8")
+        # Buffer audio to send larger chunks (Gemini may need bigger chunks)
+        self.input_audio_buffer.extend(audio_data)
+
+        # Send in 1024 byte chunks as per Google docs
+        if len(self.input_audio_buffer) < 1024:
+            return
+
+        audio_to_send = bytes(self.input_audio_buffer)
+        self.input_audio_buffer = bytearray()
+
+        # DEBUG: Log audio chunk info
+        import struct
+        num_samples = len(audio_to_send) // 2
+        if num_samples > 0:
+            samples = struct.unpack(f'<{num_samples}h', audio_to_send)
+            rms = (sum(s*s for s in samples) / num_samples) ** 0.5
+            print(f"[Gemini Input] {len(audio_to_send)} bytes, {num_samples} samples, RMS: {rms:.0f}")
+
+        b64_audio = base64.b64encode(audio_to_send).decode("utf-8")
         
         realtime_input = {
             "realtimeInput": {
@@ -96,13 +121,16 @@ class GeminiLiveEngine(ConversationEngine):
                 # print(f"DEBUG: Received from Google: {len(raw_msg)} bytes")
                 response = json.loads(raw_msg)
                 
+                # Log ALL responses for debugging
+                print(f"[Gemini Response] {json.dumps(response)[:500]}")
+
                 if response.get("setupComplete"):
-                    print(f"DEBUG: Setup Complete: {response}")
+                    print(f"DEBUG: Setup Complete")
                 
                 # Handle Transcriptions
                 transcription = response.get("audioTranscription")
                 if transcription:
-                    print(f"USER SAID: {transcription.get('text')}")
+                    print(f"[Gemini STT] User said: '{transcription.get('text')}'")
 
                 # Extract Audio
                 server_content = response.get("serverContent")
@@ -110,16 +138,22 @@ class GeminiLiveEngine(ConversationEngine):
                     model_turn = server_content.get("modelTurn")
                     if model_turn:
                         self.is_responding = True
-                        
+
                         parts = model_turn.get("parts", [])
                         for part in parts:
                             if "inlineData" in part:
-                                # Received Audio
-                                b64_data = part["inlineData"]["data"]
-                                await self.output_handler(json.dumps({
-                                    "type": "audio",
-                                    "data": b64_data
-                                }))
+                                # Received Audio - buffer it for smooth playback
+                                raw_audio = base64.b64decode(part["inlineData"]["data"])
+                                self.audio_buffer.extend(raw_audio)
+
+                                # Send when buffer is large enough
+                                if len(self.audio_buffer) >= self.MIN_AUDIO_BUFFER_SIZE:
+                                    b64_data = base64.b64encode(self.audio_buffer).decode("utf-8")
+                                    await self.output_handler(json.dumps({
+                                        "type": "audio",
+                                        "data": b64_data
+                                    }))
+                                    self.audio_buffer = bytearray()
                             elif "text" in part:
                                 # Received Text
                                 print(f"DEBUG: Received Text Part: {part['text'][:100]}...")
@@ -127,9 +161,18 @@ class GeminiLiveEngine(ConversationEngine):
                                     "type": "response_chunk",
                                     "content": part["text"]
                                 }))
-                
+
                 # Handle Turn Complete
                 if server_content and server_content.get("turnComplete"):
+                    # Flush any remaining audio in buffer
+                    if len(self.audio_buffer) > 0:
+                        b64_data = base64.b64encode(self.audio_buffer).decode("utf-8")
+                        await self.output_handler(json.dumps({
+                            "type": "audio",
+                            "data": b64_data
+                        }))
+                        self.audio_buffer = bytearray()
+
                     print("DEBUG: Google sent Turn Complete -> Forwarding to Client")
                     self.is_responding = False
                     await self.output_handler(json.dumps({"type": "turn_complete"}))

@@ -15,7 +15,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>();
   
-  const { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk } = useAudio();
+  const { isListening, audioLevel, pcmRms, analyser, startListening, stopListening, playAudioChunk, resetAudioPlayback, playAccumulatedAudio } = useAudio();
   const { isConnected, sendMessage, lastMessage } = useWebSocket('ws://localhost:8000/ws');
   
   // Ref to access current state/level in callbacks without dependency issues (Stale Closure Fix)
@@ -82,6 +82,7 @@ function App() {
             }
             else if (data.type === 'turn_complete') {
                 Promise.resolve().then(() => {
+                    playAccumulatedAudio(); // Play all buffered audio as WAV
                     setAppState('listening');
                     setMessages(prev => {
                         const last = prev[prev.length - 1];
@@ -177,7 +178,7 @@ function App() {
              console.log("Non-JSON message:", lastMessage);
         }
     }
-  }, [lastMessage, handleAudioData, playAudioChunk, selectedDeviceId, sendMessage, startListening, stopListening]);
+  }, [lastMessage, handleAudioData, playAudioChunk, playAccumulatedAudio, resetAudioPlayback, selectedDeviceId, sendMessage, startListening, stopListening]);
 
 
   return (
