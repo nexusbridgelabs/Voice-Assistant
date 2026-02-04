@@ -72,7 +72,7 @@ function App() {
         try {
             const data = JSON.parse(lastMessage);
             
-            if data.type === 'state') {
+            if (data.type === 'state') {
                 if (data.state === 'processing') {
                     resetAudioPlayback();
                     Promise.resolve().then(() => setAppState('processing'));
