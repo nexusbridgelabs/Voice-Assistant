@@ -15,6 +15,7 @@ export const useAudio = () => {
   const nextStartTimeRef = useRef<number>(0);
   const outputDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const audioOutputRef = useRef<HTMLAudioElement | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null); // Master gain for playback
 
   const startListening = useCallback(async (onAudioData: (data: ArrayBuffer) => void, deviceId?: string) => {
     try {
@@ -209,12 +210,17 @@ export const useAudio = () => {
           playbackContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
           console.log(`[Audio] Playback context created at ${playbackContextRef.current.sampleRate}Hz`);
           
-          const playbackAnalyser = playbackContextRef.current.createAnalyser();
+          const ctx = playbackContextRef.current;
+          const gainNode = ctx.createGain();
+          gainNode.connect(ctx.destination);
+          gainNodeRef.current = gainNode;
+
+          const playbackAnalyser = ctx.createAnalyser();
           playbackAnalyser.fftSize = 256;
           playbackAnalyserRef.current = playbackAnalyser;
-          playbackAnalyser.connect(playbackContextRef.current.destination);
+          playbackAnalyser.connect(gainNode); // Connect to Gain instead of Destination
           
-          nextPlayTimeRef.current = playbackContextRef.current.currentTime;
+          nextPlayTimeRef.current = ctx.currentTime;
       }
       return playbackContextRef.current;
   }, []);
@@ -231,12 +237,21 @@ export const useAudio = () => {
   const stopAudioPlayback = useCallback(() => {
       const ctx = playbackContextRef.current;
       if (ctx) {
+          // Hard mute first to prevent tail overlap
+          if (gainNodeRef.current) {
+              try {
+                  gainNodeRef.current.gain.setValueAtTime(0, ctx.currentTime);
+                  gainNodeRef.current.disconnect();
+              } catch (e) { /* ignore */ }
+          }
+
           // We can't easily "cancel" already scheduled AudioBufferSourceNodes 
           // without keeping track of them all, but we can suspend/resume the context
           // or just close and recreate it for a "hard stop".
           // Re-creating the context is the most reliable way to kill all pending audio.
-          playbackContextRef.current.close().catch(() => {});
+          ctx.close().catch(() => {});
           playbackContextRef.current = null;
+          gainNodeRef.current = null;
           nextPlayTimeRef.current = 0;
           console.log('[Audio] Playback stopped and context cleared');
       }
