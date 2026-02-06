@@ -193,7 +193,11 @@ class DeepgramPipelineEngine(ConversationEngine):
         print(f"\n[LLM] Generating response for: '{text}'")
         # Send processing state to frontend
         if self.output_handler:
-            await self.output_handler(json.dumps({"type": "state", "state": "processing"}))
+            await self.output_handler(json.dumps({
+                "type": "state", 
+                "state": "processing",
+                "turn_id": self.current_turn_id
+            }))
         
         # Start keepalive loop to prevent Deepgram timeout during agent turn
         self.keepalive_task = asyncio.create_task(self._keepalive_loop())

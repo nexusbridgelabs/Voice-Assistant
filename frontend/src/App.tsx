@@ -78,6 +78,9 @@ function App() {
             
             if (data.type === 'state') {
                 if (data.state === 'processing') {
+                    if (data.turn_id !== undefined) {
+                        turnIdRef.current = data.turn_id;
+                    }
                     // Only increment turnId if it's a fresh turn from VAD (not explicitly triggered by handeSendMessage)
                     // Actually, safer to just reset playback and ensure we are ready for new turn_id audio
                     resetAudioPlayback();
