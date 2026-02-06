@@ -7,11 +7,17 @@ from audio_providers.stt.deepgram import DeepgramSTTProvider
 from audio_providers.llm.gemini_llm import GeminiLLMProvider
 from audio_providers.tts.elevenlabs_tts import ElevenLabsTTSProvider
 from audio_providers.tts.kokoro_tts import KokoroTTSProvider
+from tools.time_tools import TIME_TOOLS_DEFINITIONS, AVAILABLE_TOOLS
 
 class DeepgramPipelineEngine(ConversationEngine):
     def __init__(self, system_prompt: str, deepgram_key: str, google_key: str, tts_config: dict):
         self.stt = DeepgramSTTProvider(deepgram_key)
-        self.llm = GeminiLLMProvider(google_key, system_prompt)
+        self.llm = GeminiLLMProvider(
+            api_key=google_key, 
+            system_prompt=system_prompt,
+            tool_definitions=TIME_TOOLS_DEFINITIONS,
+            tool_implementations=AVAILABLE_TOOLS
+        )
 
         # Initialize TTS provider based on config
         if tts_config.get("provider") == "kokoro":
