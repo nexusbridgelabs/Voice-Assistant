@@ -21,6 +21,7 @@ function App() {
   // Ref to access current state/level in callbacks without dependency issues (Stale Closure Fix)
   const audioLevelRef = useRef(0);
   const appStateRef = useRef(appState);
+  const ignoreAudioRef = useRef(false);
 
   useEffect(() => {
     audioLevelRef.current = audioLevel;
@@ -74,15 +75,21 @@ function App() {
             
             if (data.type === 'state') {
                 if (data.state === 'processing') {
+                    ignoreAudioRef.current = false;
                     resetAudioPlayback();
                     Promise.resolve().then(() => setAppState('processing'));
                 }
             } 
             else if (data.type === 'audio') {
-                playAudioChunk(data.data);
-                Promise.resolve().then(() => setAppState('speaking'));
+                if (!ignoreAudioRef.current) {
+                    playAudioChunk(data.data);
+                    Promise.resolve().then(() => setAppState('speaking'));
+                } else {
+                    console.log("Ignored stray audio packet");
+                }
             }
             else if (data.type === 'stop_audio') {
+                ignoreAudioRef.current = true;
                 stopAudioPlayback();
                 Promise.resolve().then(() => setAppState('listening'));
             }

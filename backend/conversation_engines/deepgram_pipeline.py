@@ -121,14 +121,18 @@ class DeepgramPipelineEngine(ConversationEngine):
                     is_final = event.get("is_final", False)
                     
                     if is_agent_active and text.strip():
-                         print(f"\n[Barge-In] User spoke during agent turn: '{text}' -> Stopping playback")
-                         self.turn_task.cancel()
-                         try:
-                             await self.turn_task
-                         except asyncio.CancelledError:
+                         # Filter noise: Ignore single-character interim results (e.g. "a", "I") to avoid false positives
+                         if not is_final and len(text.strip()) < 2:
                              pass
-                         if self.output_handler:
-                             await self.output_handler(json.dumps({"type": "stop_audio"}))
+                         else:
+                             print(f"\n[Barge-In] User spoke during agent turn: '{text}' -> Stopping playback")
+                             self.turn_task.cancel()
+                             try:
+                                 await self.turn_task
+                             except asyncio.CancelledError:
+                                 pass
+                             if self.output_handler:
+                                 await self.output_handler(json.dumps({"type": "stop_audio"}))
                     
                     current_turn_text = " ".join(self.current_transcript + [text])
 
