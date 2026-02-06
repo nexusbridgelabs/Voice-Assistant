@@ -38,6 +38,7 @@ class DeepgramPipelineEngine(ConversationEngine):
         self.silence_timer_task = None
         self.keepalive_task = None
         self.interruption_hits = 0
+        self.current_turn_id = 0
 
     async def start_session(self, output_handler):
         self.output_handler = output_handler
@@ -62,6 +63,7 @@ class DeepgramPipelineEngine(ConversationEngine):
                 if self.interruption_hits >= 7: # ~200ms of speech
                     print(f"[Barge-In] Local VAD verified sustained speech (RMS: {rms:.0f}) -> Stopping playback")
                     self.interruption_hits = 0
+                    self.current_turn_id += 1 # Invalidate current turn
                     if self.output_handler:
                         await self.output_handler(json.dumps({"type": "stop_audio"}))
             else:
@@ -71,6 +73,15 @@ class DeepgramPipelineEngine(ConversationEngine):
         await self.stt.send_audio(audio_data)
 
     async def process_text_input(self, text: str):
+        # Text input from frontend might include turn_id
+        try:
+            data = json.loads(text)
+            if data.get("type") == "text":
+                self.current_turn_id = data.get("turn_id", self.current_turn_id)
+                await self.handle_turn(data.get("content"))
+                return
+        except Exception:
+            pass
         await self.handle_turn(text)
 
     async def _silence_timer(self, duration=1.2):
@@ -101,10 +112,12 @@ class DeepgramPipelineEngine(ConversationEngine):
                     await self.turn_task # Wait for cancellation to complete
                 except asyncio.CancelledError:
                     pass
+                self.current_turn_id += 1 # Invalidate current turn
                 if self.output_handler:
                     await self.output_handler(json.dumps({"type": "stop_audio"}))
             
             print(f"[Pipeline] Starting turn with text: '{full_text}'")
+            self.current_turn_id += 1 # New valid turn
             self.turn_task = asyncio.create_task(self.handle_turn(full_text))
         else:
             # Only log if we expected something, to avoid noise
@@ -121,16 +134,16 @@ class DeepgramPipelineEngine(ConversationEngine):
                     is_final = event.get("is_final", False)
                     
                     if is_agent_active and text.strip():
-                         # Filter noise: Ignore single-character interim results (e.g. "a", "I") to avoid false positives
-                         if not is_final and len(text.strip()) < 2:
-                             pass
-                         else:
+                         # Filter noise: Require at least 2 characters for interim to avoid false positives 
+                         # (e.g. random "s" or "a" being detected)
+                         if len(text.strip()) > 1 or is_final:
                              print(f"\n[Barge-In] User spoke during agent turn: '{text}' -> Stopping playback")
                              self.turn_task.cancel()
                              try:
                                  await self.turn_task
                              except asyncio.CancelledError:
                                  pass
+                             self.current_turn_id += 1 # Invalidate current turn
                              if self.output_handler:
                                  await self.output_handler(json.dumps({"type": "stop_audio"}))
                     
@@ -186,6 +199,8 @@ class DeepgramPipelineEngine(ConversationEngine):
         self.keepalive_task = asyncio.create_task(self._keepalive_loop())
         self.turn_total_bytes = 0  # Track total audio bytes for this turn
         try:
+            # Capture current turn ID for this specific response generation
+            response_turn_id = self.current_turn_id
             response_stream = self.llm.generate_response(text)
 
             buffer = ""
@@ -195,11 +210,11 @@ class DeepgramPipelineEngine(ConversationEngine):
                 if len(sentences) > 1:
                     for sentence in sentences[:-1]:
                         if sentence.strip():
-                             await self.speak_sentence(sentence)
+                             await self.speak_sentence(sentence, response_turn_id)
                     buffer = sentences[-1]
 
             if buffer.strip():
-                await self.speak_sentence(buffer)
+                await self.speak_sentence(buffer, response_turn_id)
 
             # Small echo buffer at end of turn
             print(f"\n[Pipeline] Total turn audio: {self.turn_total_bytes} bytes")
@@ -218,7 +233,7 @@ class DeepgramPipelineEngine(ConversationEngine):
                 self.keepalive_task.cancel()
                 self.keepalive_task = None
 
-    async def speak_sentence(self, sentence: str):
+    async def speak_sentence(self, sentence: str, turn_id: int):
         print(f"\n[TTS] Synthesizing: '{sentence}'")
         await self.output_handler(json.dumps({
             "type": "response_chunk",
@@ -240,7 +255,8 @@ class DeepgramPipelineEngine(ConversationEngine):
                         b64_data = base64.b64encode(audio_buffer).decode("utf-8")
                         await self.output_handler(json.dumps({
                             "type": "audio",
-                            "data": b64_data
+                            "data": b64_data,
+                            "turn_id": turn_id
                         }))
                         chunks_sent += 1
                         total_bytes += len(audio_buffer)
@@ -251,7 +267,8 @@ class DeepgramPipelineEngine(ConversationEngine):
                 b64_data = base64.b64encode(audio_buffer).decode("utf-8")
                 await self.output_handler(json.dumps({
                     "type": "audio",
-                    "data": b64_data
+                    "data": b64_data,
+                    "turn_id": turn_id
                 }))
                 chunks_sent += 1
                 total_bytes += len(audio_buffer)

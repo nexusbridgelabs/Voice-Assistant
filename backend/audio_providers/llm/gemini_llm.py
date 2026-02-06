@@ -2,7 +2,7 @@ import os
 import json
 import traceback
 from openai import AsyncOpenAI
-from typing import AsyncGenerator, List, Dict, Any, Optional
+from typing import AsyncGenerator, List, Dict, Any
 from .base import LLMProvider
 
 class GeminiLLMProvider(LLMProvider):

@@ -21,7 +21,7 @@ function App() {
   // Ref to access current state/level in callbacks without dependency issues (Stale Closure Fix)
   const audioLevelRef = useRef(0);
   const appStateRef = useRef(appState);
-  const ignoreAudioRef = useRef(false);
+  const turnIdRef = useRef(0); // Track current valid turn ID
 
   useEffect(() => {
     audioLevelRef.current = audioLevel;
@@ -60,11 +60,14 @@ function App() {
         timestamp: Date.now()
     };
     setMessages(prev => [...prev, newMessage]);
+    
+    // New turn: Increment turn ID and reset audio
+    turnIdRef.current += 1;
     resetAudioPlayback();
     setAppState('processing'); // Visual feedback
     
     // Send to backend
-    sendMessage(JSON.stringify({ type: 'text', content: text }));
+    sendMessage(JSON.stringify({ type: 'text', content: text, turn_id: turnIdRef.current }));
   };
 
   // Handle incoming WebSocket messages
@@ -75,21 +78,24 @@ function App() {
             
             if (data.type === 'state') {
                 if (data.state === 'processing') {
-                    ignoreAudioRef.current = false;
+                    // Only increment turnId if it's a fresh turn from VAD (not explicitly triggered by handeSendMessage)
+                    // Actually, safer to just reset playback and ensure we are ready for new turn_id audio
                     resetAudioPlayback();
                     Promise.resolve().then(() => setAppState('processing'));
                 }
             } 
             else if (data.type === 'audio') {
-                if (!ignoreAudioRef.current) {
-                    playAudioChunk(data.data);
-                    Promise.resolve().then(() => setAppState('speaking'));
-                } else {
-                    console.log("Ignored stray audio packet");
+                // Ignore audio from previous turns (interrupted or stale)
+                if (data.turn_id !== undefined && data.turn_id !== turnIdRef.current) {
+                    console.log(`[Audio] Dropping stale packet (turn_id: ${data.turn_id}, current: ${turnIdRef.current})`);
+                    return;
                 }
+                playAudioChunk(data.data);
+                Promise.resolve().then(() => setAppState('speaking'));
             }
             else if (data.type === 'stop_audio') {
-                ignoreAudioRef.current = true;
+                // IMMEDIATELY increment turnId to invalidate any in-flight audio packets from the backend
+                turnIdRef.current += 1;
                 stopAudioPlayback();
                 Promise.resolve().then(() => setAppState('listening'));
             }
@@ -195,7 +201,7 @@ function App() {
              console.log("Non-JSON message:", lastMessage);
         }
     }
-  }, [lastMessage, handleAudioData, playAudioChunk, playAccumulatedAudio, resetAudioPlayback, selectedDeviceId, sendMessage, startListening, stopListening]);
+  }, [lastMessage, handleAudioData, playAudioChunk, playAccumulatedAudio, resetAudioPlayback, selectedDeviceId, sendMessage, startListening, stopListening, getPlaybackRemainingTime, stopAudioPlayback]);
 
 
   return (

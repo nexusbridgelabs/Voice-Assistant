@@ -1,5 +1,4 @@
 from datetime import datetime
-import json
 
 def get_current_time():
     """Returns the current time in HH:MM AM/PM format."""
