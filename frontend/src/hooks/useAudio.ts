@@ -242,7 +242,7 @@ export const useAudio = () => {
               try {
                   gainNodeRef.current.gain.setValueAtTime(0, ctx.currentTime);
                   gainNodeRef.current.disconnect();
-              } catch (e) { /* ignore */ }
+              } catch { /* ignore */ }
           }
 
           // We can't easily "cancel" already scheduled AudioBufferSourceNodes 
